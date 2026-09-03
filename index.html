@@ -13,7 +13,7 @@
     .interactive { pointer-events: auto; }
     
     /* HUD */
-    #hud { display: none; justify-content: space-between; padding: 15px; width: 100%; }
+    #hud { display: none; justify-content: space-between; padding: 15px; width: 100%; align-items: flex-start; }
     .hud-card { background: rgba(15, 23, 42, 0.75); backdrop-filter: blur(12px); border: 1px solid rgba(255, 255, 255, 0.15); padding: 10px 18px; border-radius: 12px; }
     .speedo { font-size: 1.6rem; font-weight: 900; font-style: italic; color: #38bdf8; }
     .hud-value { font-size: 1.2rem; font-weight: 700; color: #f8fafc; }
@@ -24,10 +24,14 @@
     .nitro-bar { width: 100%; height: 100%; background: linear-gradient(90deg, #3b82f6, #06b6d4); transition: width 0.1s linear; }
     .nitro-bar.active { background: linear-gradient(90deg, #f59e0b, #ef4444); }
 
-    /* Countdown & Race Announcements */
+    /* Minimap UI */
+    #minimap-card { position: absolute; bottom: 20px; right: 20px; width: 120px; height: 120px; background: rgba(15, 23, 42, 0.85); border: 2px solid rgba(255,255,255,0.2); border-radius: 50%; overflow: hidden; display: none; z-index: 12; }
+    #minimap-canvas { width: 100%; height: 100%; }
+
+    /* Countdown & Announcements */
     #countdown-overlay { position: absolute; top: 40%; left: 50%; transform: translate(-50%, -50%); font-size: 5rem; font-weight: 900; font-style: italic; color: #38bdf8; text-shadow: 0 0 20px rgba(56,189,248,0.8); display: none; text-align: center; }
 
-    /* Touch Controls */
+    /* Mobile Touch Controls */
     #touch-controls { display: none; width: 100%; padding: 20px; justify-content: space-between; align-items: flex-end; }
     .touch-cluster { display: flex; gap: 12px; }
     .touch-btn { width: 65px; height: 65px; border-radius: 50%; background: rgba(255, 255, 255, 0.2); backdrop-filter: blur(8px); border: 2px solid rgba(255, 255, 255, 0.4); color: white; font-size: 1.5rem; font-weight: bold; display: flex; align-items: center; justify-content: center; }
@@ -46,12 +50,17 @@
     
     .room-display { background: rgba(56, 189, 248, 0.15); border: 1px dashed #38bdf8; padding: 10px; border-radius: 10px; font-size: 1.4rem; font-weight: bold; color: #38bdf8; letter-spacing: 3px; margin: 10px 0; }
 
-    /* Shop Overlay */
+    /* Shop */
     #shop-panel { display: none; max-width: 600px; }
     .shop-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 12px; margin: 15px 0; max-height: 45vh; overflow-y: auto; }
     .car-card { background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.1); padding: 12px; border-radius: 12px; text-align: center; }
     .car-card.selected { border-color: #38bdf8; background: rgba(56, 189, 248, 0.15); }
     .upgrade-box { background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.1); padding: 10px; border-radius: 12px; margin-bottom: 12px; display: flex; justify-content: space-between; align-items: center; }
+    
+    /* Results Screen */
+    .winner-badge { font-size: 1.6rem; font-weight: 900; text-transform: uppercase; margin-bottom: 10px; }
+    .winner-gold { color: #eab308; text-shadow: 0 0 15px rgba(234, 179, 8, 0.5); }
+    .winner-silver { color: #94a3b8; }
   </style>
 
   <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
@@ -83,10 +92,15 @@
         <div class="hud-value" id="race-timer" style="font-size: 1rem; color: #38bdf8;">00:00.00</div>
       </div>
       <div class="hud-card" style="text-align: right;">
-        <div class="hud-label">Mode</div>
-        <div class="hud-value" id="player-count">Solo</div>
+        <div class="hud-label">Position</div>
+        <div class="hud-value" id="race-position" style="color: #eab308;">1st</div>
+        <div class="hud-label" style="margin-top: 4px;">Best Lap</div>
+        <div class="hud-value" id="best-lap-val" style="font-size: 0.85rem;">--:--.--</div>
       </div>
     </div>
+
+    <!-- Minimap UI -->
+    <div id="minimap-card"><canvas id="minimap-canvas"></canvas></div>
 
     <!-- Countdown Text Overlay -->
     <div id="countdown-overlay">3</div>
@@ -142,11 +156,11 @@
       <button class="btn btn-secondary" onclick="showMainMenu()">Back</button>
     </div>
 
-    <!-- Race Finish Results Overlay -->
+    <!-- Race Finish Results Overlay (Win Conditions System) -->
     <div id="results-panel" class="menu-panel interactive" style="display:none;">
-      <h2 style="color: #38bdf8;">RACE FINISHED!</h2>
-      <p style="font-size: 0.9rem; color: #94a3b8; margin: 10px 0;">Final Time:</p>
-      <div id="final-time-display" style="font-size: 2rem; font-weight: 900; color: #fff;">00:00.00</div>
+      <div id="winner-banner" class="winner-badge winner-gold">VICTORY!</div>
+      <p style="font-size: 0.85rem; color: #94a3b8;">Final Placement: <span id="final-place-txt" style="color:#fff; font-weight:bold;">1st Place</span></p>
+      <div id="final-time-display" style="font-size: 2rem; font-weight: 900; color: #fff; margin: 10px 0;">00:00.00</div>
       <p style="font-size: 0.95rem; color: #22c55e; font-weight: bold; margin: 12px 0;">Prize Earned: +$<span id="prize-amount">0</span></p>
       <button class="btn" onclick="showMainMenu()">Return to Menu</button>
     </div>
@@ -167,10 +181,14 @@
     let carState = { x: 0, y: 0.3, z: 0, speed: 0, angle: 0 };
     const keys = { Forward: false, Backward: false, Left: false, Right: false, Nitro: false };
     
+    // Audio Synth Engine
+    let audioCtx, engineOsc, gainNode;
+
     // Nitro System State
     let nitroFuel = 100;
     let isNitroActive = false;
     let nitroParticles = [];
+    let smokeParticles = [];
 
     // Race System State
     const TOTAL_LAPS = 3;
@@ -178,8 +196,12 @@
     let nextCheckpointIndex = 1;
     let raceState = 'menu'; // 'menu', 'countdown', 'racing', 'finished'
     let raceStartTime = 0;
+    let lapStartTime = 0;
+    let bestLapTime = Infinity;
     let raceElapsedTime = 0;
     let checkpointPositions = [];
+    let checkpointVisuals = [];
+    let racePosition = 1;
 
     const TRACK_WIDTH = 6.2;
     let trackSamplePoints = [];
@@ -233,7 +255,7 @@
       buildTrackWithBoundaries();
       buildEnvironment();
       createStartFinishGate();
-      initNitroParticles();
+      initParticles();
       
       // Initial Car Spawn
       resetCarToStartLine();
@@ -241,10 +263,38 @@
 
       window.addEventListener('resize', onWindowResize);
       setupControls();
+      initAudio();
       animate();
     }
 
-    // --- TRACK & PROPER START POSITIONING ---
+    // --- AUDIO SYNTHESIZER ---
+    function initAudio() {
+      const AudioCtx = window.AudioContext || window.webkitAudioContext;
+      if (!AudioCtx) return;
+      audioCtx = new AudioCtx();
+      engineOsc = audioCtx.createOscillator();
+      gainNode = audioCtx.createGain();
+
+      engineOsc.type = 'sawtooth';
+      engineOsc.frequency.setValueAtTime(40, audioCtx.currentTime);
+      gainNode.gain.setValueAtTime(0.0, audioCtx.currentTime);
+
+      engineOsc.connect(gainNode);
+      gainNode.connect(audioCtx.destination);
+      engineOsc.start();
+    }
+
+    function updateAudio() {
+      if (!audioCtx || raceState !== 'racing') {
+        if (gainNode) gainNode.gain.setValueAtTime(0, audioCtx.currentTime);
+        return;
+      }
+      const pitch = 40 + Math.abs(carState.speed) * 220;
+      engineOsc.frequency.setTargetAtTime(pitch, audioCtx.currentTime, 0.1);
+      gainNode.gain.setTargetAtTime(0.08, audioCtx.currentTime, 0.1);
+    }
+
+    // --- TRACK & CHECKPOINTS ---
     function buildTrackWithBoundaries() {
       trackCurve = new THREE.CatmullRomCurve3([
         new THREE.Vector3(0, 0, 0),
@@ -258,14 +308,26 @@
 
       trackSamplePoints = trackCurve.getPoints(400);
 
-      // Setup 8 Racing Checkpoints around the track curve
+      // Setup Checkpoint Rings
       checkpointPositions = [];
+      const cpGateGeo = new THREE.TorusGeometry(TRACK_WIDTH, 0.2, 8, 24);
+      const cpGateMat = new THREE.MeshBasicMaterial({ color: 0x38bdf8, transparent: true, opacity: 0.4 });
+
       for (let i = 0; i < 8; i++) {
         const u = i / 8;
-        checkpointPositions.push(trackCurve.getPointAt(u));
+        const pt = trackCurve.getPointAt(u);
+        const tangent = trackCurve.getTangentAt(u);
+        checkpointPositions.push(pt);
+
+        const ring = new THREE.Mesh(cpGateGeo, cpGateMat.clone());
+        ring.position.copy(pt);
+        ring.position.y = 1.5;
+        ring.quaternion.setFromUnitVectors(new THREE.Vector3(0, 0, 1), tangent);
+        scene.add(ring);
+        checkpointVisuals.push(ring);
       }
 
-      // Road Mesh
+      // Track Meshes
       const trackGeo = new THREE.TubeGeometry(trackCurve, 150, TRACK_WIDTH, 12, true);
       const trackMat = new THREE.MeshStandardMaterial({ color: 0x262626, roughness: 0.7 });
       const trackMesh = new THREE.Mesh(trackGeo, trackMat);
@@ -274,7 +336,6 @@
       trackMesh.receiveShadow = true;
       scene.add(trackMesh);
 
-      // Curbs
       const curbGeo = new THREE.TubeGeometry(trackCurve, 150, TRACK_WIDTH + 0.4, 8, true);
       const curbMat = new THREE.MeshStandardMaterial({ color: 0xd97706, roughness: 0.4 });
       const curbMesh = new THREE.Mesh(curbGeo, curbMat);
@@ -284,7 +345,6 @@
     }
 
     function resetCarToStartLine() {
-      // Spawn at start point (u = 0) facing forward along tangent
       const startPt = trackCurve.getPointAt(0);
       const tangent = trackCurve.getTangentAt(0);
       
@@ -295,11 +355,10 @@
       carState.angle = Math.atan2(tangent.x, tangent.z);
     }
 
-    // --- DETAILED 3D CAR MODEL GENERATOR ---
+    // --- CAR CREATION ---
     function createCarMesh(colorHex) {
       const carGroup = new THREE.Group();
 
-      // Main Chasis / Body
       const bodyGeo = new THREE.BoxGeometry(1.6, 0.45, 3.2);
       const bodyMat = new THREE.MeshPhysicalMaterial({ color: colorHex, metalness: 0.7, roughness: 0.15, clearcoat: 1.0 });
       const body = new THREE.Mesh(bodyGeo, bodyMat);
@@ -307,14 +366,12 @@
       body.castShadow = true;
       carGroup.add(body);
 
-      // Curved Cabin / Cockpit
       const cabinGeo = new THREE.BoxGeometry(1.2, 0.4, 1.4);
       const cabinMat = new THREE.MeshPhysicalMaterial({ color: 0x020617, metalness: 0.9, roughness: 0.0, transparent: true, opacity: 0.85 });
       const cabin = new THREE.Mesh(cabinGeo, cabinMat);
       cabin.position.set(0, 0.75, -0.2);
       carGroup.add(cabin);
 
-      // Spoiler Arch & Wing
       const spoilerMat = new THREE.MeshStandardMaterial({ color: 0x1e293b, roughness: 0.3 });
       const spoilerWing = new THREE.Mesh(new THREE.BoxGeometry(1.7, 0.08, 0.4), bodyMat);
       spoilerWing.position.set(0, 0.85, -1.4);
@@ -328,16 +385,13 @@
       strutR.position.x = 0.6;
       carGroup.add(strutR);
 
-      // Wheels (4 3D Cylinders with Hubcaps)
       const wheelGeo = new THREE.CylinderGeometry(0.35, 0.35, 0.28, 16);
       const wheelMat = new THREE.MeshStandardMaterial({ color: 0x111111, roughness: 0.8 });
       const rimMat = new THREE.MeshStandardMaterial({ color: 0xd1d5db, metalness: 0.9, roughness: 0.2 });
 
       const wheelPositions = [
-        { x: -0.85, y: 0.35, z: 1.0 },
-        { x: 0.85, y: 0.35, z: 1.0 },
-        { x: -0.85, y: 0.35, z: -1.0 },
-        { x: 0.85, y: 0.35, z: -1.0 }
+        { x: -0.85, y: 0.35, z: 1.0 }, { x: 0.85, y: 0.35, z: 1.0 },
+        { x: -0.85, y: 0.35, z: -1.0 }, { x: 0.85, y: 0.35, z: -1.0 }
       ];
 
       wheelPositions.forEach(pos => {
@@ -353,16 +407,6 @@
         carGroup.add(wheel);
       });
 
-      // Headlights & Glowing Taillights
-      const lightGeo = new THREE.BoxGeometry(0.3, 0.1, 0.05);
-      const headMat = new THREE.MeshBasicMaterial({ color: 0xfef08a });
-      const tailMat = new THREE.MeshBasicMaterial({ color: 0xef4444 });
-
-      const headL = new THREE.Mesh(lightGeo, headMat); headL.position.set(-0.55, 0.45, 1.6); carGroup.add(headL);
-      const headR = new THREE.Mesh(lightGeo, headMat); headR.position.set(0.55, 0.45, 1.6); carGroup.add(headR);
-      const tailL = new THREE.Mesh(lightGeo, tailMat); tailL.position.set(-0.55, 0.45, -1.6); carGroup.add(tailL);
-      const tailR = new THREE.Mesh(lightGeo, tailMat); tailR.position.set(0.55, 0.45, -1.6); carGroup.add(tailR);
-
       return carGroup;
     }
 
@@ -373,26 +417,30 @@
       scene.add(playerCarMesh);
     }
 
-    // --- NITRO PARTICLE FX ---
-    function initNitroParticles() {
+    // --- PARTICLE FX SYSTEMS ---
+    function initParticles() {
       const pGeo = new THREE.SphereGeometry(0.08, 6, 6);
-      const pMat = new THREE.MeshBasicMaterial({ color: 0x38bdf8, transparent: true, opacity: 0.8 });
+      const nitroMat = new THREE.MeshBasicMaterial({ color: 0x38bdf8, transparent: true, opacity: 0.8 });
+      const smokeMat = new THREE.MeshBasicMaterial({ color: 0x94a3b8, transparent: true, opacity: 0.4 });
 
-      for (let i = 0; i < 20; i++) {
-        const p = new THREE.Mesh(pGeo, pMat);
+      for (let i = 0; i < 25; i++) {
+        const p = new THREE.Mesh(pGeo, nitroMat);
         p.visible = false;
         scene.add(p);
-        nitroParticles.push({ mesh: p, life: 0, maxLife: 1 });
+        nitroParticles.push({ mesh: p, life: 0 });
+
+        const s = new THREE.Mesh(pGeo, smokeMat);
+        s.visible = false;
+        scene.add(s);
+        smokeParticles.push({ mesh: s, life: 0 });
       }
     }
 
     function triggerNitroParticles() {
       if (!playerCarMesh) return;
-      
       const backOffset = new THREE.Vector3(0, 0.3, -1.7).applyMatrix4(playerCarMesh.matrixWorld);
-
       nitroParticles.forEach(p => {
-        if (!p.mesh.visible && Math.random() > 0.4) {
+        if (!p.mesh.visible && Math.random() > 0.3) {
           p.mesh.visible = true;
           p.mesh.position.copy(backOffset).add(new THREE.Vector3((Math.random() - 0.5) * 0.3, (Math.random() - 0.5) * 0.2, (Math.random() - 0.5) * 0.3));
           p.life = 1.0;
@@ -400,7 +448,19 @@
       });
     }
 
-    function updateNitroParticles() {
+    function triggerSmokeParticles() {
+      if (!playerCarMesh) return;
+      const backOffset = new THREE.Vector3(0, 0.1, -1.2).applyMatrix4(playerCarMesh.matrixWorld);
+      smokeParticles.forEach(s => {
+        if (!s.mesh.visible && Math.random() > 0.5) {
+          s.mesh.visible = true;
+          s.mesh.position.copy(backOffset).add(new THREE.Vector3((Math.random() - 0.5) * 0.4, 0, (Math.random() - 0.5) * 0.4));
+          s.life = 1.0;
+        }
+      });
+    }
+
+    function updateParticles() {
       nitroParticles.forEach(p => {
         if (p.mesh.visible) {
           p.life -= 0.08;
@@ -408,9 +468,16 @@
           if (p.life <= 0) p.mesh.visible = false;
         }
       });
+      smokeParticles.forEach(s => {
+        if (s.mesh.visible) {
+          s.life -= 0.05;
+          s.mesh.scale.setScalar((1 - s.life) * 2.5);
+          if (s.life <= 0) s.mesh.visible = false;
+        }
+      });
     }
 
-    // --- ENVIRONMENT & START ARCH ---
+    // --- ENVIRONMENT ---
     function buildEnvironment() {
       const groundGeo = new THREE.PlaneGeometry(800, 800);
       const groundMat = new THREE.MeshStandardMaterial({ color: 0x3d7034, roughness: 0.9 });
@@ -419,33 +486,6 @@
       ground.position.y = -0.15;
       ground.receiveShadow = true;
       scene.add(ground);
-
-      const trunkGeo = new THREE.CylinderGeometry(0.3, 0.5, 2, 6);
-      const trunkMat = new THREE.MeshStandardMaterial({ color: 0x543d2b, roughness: 0.9 });
-      const leavesGeo = new THREE.ConeGeometry(2.2, 5, 6);
-      const leavesMat = new THREE.MeshStandardMaterial({ color: 0x1e4620, roughness: 0.8 });
-
-      const createTree = (x, z) => {
-        const treeGroup = new THREE.Group();
-        const trunk = new THREE.Mesh(trunkGeo, trunkMat); trunk.position.y = 1; trunk.castShadow = true; treeGroup.add(trunk);
-        const leaves = new THREE.Mesh(leavesGeo, leavesMat); leaves.position.y = 4; leaves.castShadow = true; treeGroup.add(leaves);
-        const scale = 0.8 + Math.random() * 0.5;
-        treeGroup.scale.set(scale, scale, scale);
-        treeGroup.position.set(x, -0.1, z);
-        scene.add(treeGroup);
-      };
-
-      for (let i = 0; i < 180; i++) {
-        const x = (Math.random() - 0.5) * 450;
-        const z = (Math.random() - 0.5) * 450;
-        let tooClose = false;
-        for (let j = 0; j < trackSamplePoints.length; j += 10) {
-          if (Math.hypot(trackSamplePoints[j].x - x, trackSamplePoints[j].z - z) < TRACK_WIDTH + 4) {
-            tooClose = true; break;
-          }
-        }
-        if (!tooClose) createTree(x, z);
-      }
     }
 
     function createStartFinishGate() {
@@ -460,16 +500,6 @@
       const bannerMat = new THREE.MeshStandardMaterial({ color: 0xef4444, roughness: 0.3 });
       const banner = new THREE.Mesh(bannerGeo, bannerMat); banner.position.set(0, 4.8, 0); gateGroup.add(banner);
 
-      const canvas = document.createElement('canvas'); canvas.width = 128; canvas.height = 32;
-      const ctx = canvas.getContext('2d'); ctx.fillStyle = '#ffffff'; ctx.fillRect(0,0,128,32); ctx.fillStyle = '#000000';
-      for (let i = 0; i < 8; i++) { for (let j = 0; j < 2; j++) { if ((i + j) % 2 === 0) ctx.fillRect(i * 16, j * 16, 16, 16); } }
-
-      const lineTexture = new THREE.CanvasTexture(canvas);
-      const lineGeo = new THREE.PlaneGeometry(10, 2);
-      const lineMat = new THREE.MeshStandardMaterial({ map: lineTexture, roughness: 0.8 });
-      const lineMesh = new THREE.Mesh(lineGeo, lineMat); lineMesh.rotation.x = -Math.PI / 2; lineMesh.position.set(0, 0.01, 0); gateGroup.add(lineMesh);
-
-      // Position gate cleanly over start vector
       const startPt = trackCurve.getPointAt(0);
       const tangent = trackCurve.getTangentAt(0);
       gateGroup.position.copy(startPt);
@@ -479,14 +509,21 @@
 
     // --- CONTROLS ---
     function setupControls() {
-      window.addEventListener('keydown', (e) => handleKey(e.code, true));
+      window.addEventListener('keydown', (e) => {
+        if (audioCtx && audioCtx.state === 'suspended') audioCtx.resume();
+        handleKey(e.code, true);
+      });
       window.addEventListener('keyup', (e) => handleKey(e.code, false));
 
       if (isTouch) {
         document.getElementById('touch-controls').style.display = 'flex';
         const bindTouch = (id, key) => {
           const el = document.getElementById(id);
-          el.addEventListener('touchstart', (e) => { e.preventDefault(); keys[key] = true; });
+          el.addEventListener('touchstart', (e) => { 
+            e.preventDefault(); 
+            if (audioCtx && audioCtx.state === 'suspended') audioCtx.resume();
+            keys[key] = true; 
+          });
           el.addEventListener('touchend', (e) => { e.preventDefault(); keys[key] = false; });
         };
         bindTouch('btn-gas', 'Forward');
@@ -518,13 +555,25 @@
       return Math.sqrt(minDistanceSq) <= TRACK_WIDTH - 0.8;
     }
 
-    // --- PHYSICS & RACING SYSTEM LOOP ---
+    // --- COLLISION DETECTOR (Car vs Car) ---
+    function checkCarCollisions() {
+      Object.keys(otherPlayers).forEach(id => {
+        const otherMesh = otherPlayers[id];
+        const dist = Math.hypot(carState.x - otherMesh.position.x, carState.z - otherMesh.position.z);
+        if (dist < 1.8) {
+          // Bounce mechanics
+          carState.speed = -carState.speed * 0.6;
+          triggerSmokeParticles();
+        }
+      });
+    }
+
+    // --- PHYSICS & GAME LOOP ---
     function updatePhysics() {
       if (raceState !== 'racing' && raceState !== 'menu') return;
 
       const activeCar = CARS.find(c => c.id === gameState.selectedCar);
 
-      // Nitro handling & calculations
       let currentTopSpeed = activeCar.topSpeed;
       let currentAccel = activeCar.accel;
 
@@ -545,7 +594,6 @@
       }
       nitroBarEl.style.width = `${nitroFuel}%`;
 
-      // Acceleration / Steering
       if (keys.Forward && raceState === 'racing') carState.speed = Math.min(carState.speed + currentAccel, currentTopSpeed);
       else if (keys.Backward && raceState === 'racing') carState.speed = Math.max(carState.speed - currentAccel, -currentTopSpeed * 0.4);
       else carState.speed *= 0.97;
@@ -556,6 +604,11 @@
         if (keys.Right) carState.angle -= activeCar.handling * dir;
       }
 
+      // Drift Smoke Particle Effect
+      if (Math.abs(carState.speed) > 0.5 && (keys.Left || keys.Right)) {
+        triggerSmokeParticles();
+      }
+
       const nextX = carState.x + Math.sin(carState.angle) * carState.speed;
       const nextZ = carState.z + Math.cos(carState.angle) * carState.speed;
 
@@ -564,14 +617,17 @@
         carState.z = nextZ;
       } else {
         carState.speed = -carState.speed * 0.3;
+        triggerSmokeParticles();
       }
+
+      checkCarCollisions();
 
       if (playerCarMesh) {
         playerCarMesh.position.set(carState.x, carState.y, carState.z);
         playerCarMesh.rotation.y = carState.angle;
       }
 
-      // Smooth Camera Tracking
+      // Camera
       const camOffset = new THREE.Vector3(
         carState.x - Math.sin(carState.angle) * 7.5,
         carState.y + 3.5,
@@ -587,12 +643,24 @@
         raceElapsedTime = Date.now() - raceStartTime;
         formatRaceTimer(raceElapsedTime);
 
+        // Highlight Active Ring Visual
+        checkpointVisuals.forEach((ring, idx) => {
+          ring.material.color.setHex(idx === nextCheckpointIndex ? 0xeab308 : 0x38bdf8);
+        });
+
         const targetCheckpoint = checkpointPositions[nextCheckpointIndex];
         const distToCheckpoint = Math.hypot(carState.x - targetCheckpoint.x, carState.z - targetCheckpoint.z);
 
         if (distToCheckpoint < TRACK_WIDTH + 2) {
           nextCheckpointIndex = (nextCheckpointIndex + 1) % checkpointPositions.length;
-          if (nextCheckpointIndex === 1) { // Completed a lap
+          if (nextCheckpointIndex === 1) { // Completed Lap
+            const currentLapDuration = Date.now() - lapStartTime;
+            if (currentLapDuration < bestLapTime) {
+              bestLapTime = currentLapDuration;
+              document.getElementById('best-lap-val').innerText = formatTimeMs(bestLapTime);
+            }
+            lapStartTime = Date.now();
+
             if (currentLap < TOTAL_LAPS) {
               currentLap++;
               document.getElementById('current-lap').innerText = currentLap;
@@ -601,24 +669,89 @@
             }
           }
         }
+
+        // Leaderboard Calculation
+        calculateRacePosition();
       }
+      
+      updateAudio();
+      renderMinimap();
     }
 
-    function formatRaceTimer(ms) {
+    function calculateRacePosition() {
+      let myProgress = (currentLap - 1) * 8 + nextCheckpointIndex;
+      let pos = 1;
+
+      Object.keys(otherPlayers).forEach(id => {
+        const remoteData = otherPlayers[id].raceData || { lap: 1, cp: 1 };
+        const remoteProgress = (remoteData.lap - 1) * 8 + remoteData.cp;
+        if (remoteProgress > myProgress) pos++;
+      });
+
+      racePosition = pos;
+      const posStr = pos === 1 ? '1st' : pos === 2 ? '2nd' : pos === 3 ? '3rd' : `${pos}th`;
+      document.getElementById('race-position').innerText = posStr;
+    }
+
+    function formatTimeMs(ms) {
       const totalSec = Math.floor(ms / 1000);
       const mins = Math.floor(totalSec / 60).toString().padStart(2, '0');
       const secs = (totalSec % 60).toString().padStart(2, '0');
       const millis = Math.floor((ms % 1000) / 10).toString().padStart(2, '0');
-      document.getElementById('race-timer').innerText = `${mins}:${secs}.${millis}`;
+      return `${mins}:${secs}.${millis}`;
     }
 
-    // --- RACING SYSTEM START & FINISH ---
+    function formatRaceTimer(ms) {
+      document.getElementById('race-timer').innerText = formatTimeMs(ms);
+    }
+
+    // --- MINIMAP DISPLAY ---
+    function renderMinimap() {
+      if (raceState !== 'racing') return;
+      const canvas = document.getElementById('minimap-canvas');
+      if (!canvas) return;
+      const ctx = canvas.getContext('2d');
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+      const center = 60;
+      const scale = 0.35;
+
+      // Draw Track Curve
+      ctx.beginPath();
+      ctx.strokeStyle = '#64748b';
+      ctx.lineWidth = 4;
+      trackSamplePoints.forEach((pt, idx) => {
+        const mx = center + pt.x * scale;
+        const my = center + pt.z * scale;
+        if (idx === 0) ctx.moveTo(mx, my);
+        else ctx.lineTo(mx, my);
+      });
+      ctx.closePath();
+      ctx.stroke();
+
+      // Draw Player Dot
+      ctx.fillStyle = '#38bdf8';
+      ctx.beginPath();
+      ctx.arc(center + carState.x * scale, center + carState.z * scale, 4, 0, Math.PI * 2);
+      ctx.fill();
+
+      // Draw Opponents
+      ctx.fillStyle = '#ef4444';
+      Object.keys(otherPlayers).forEach(id => {
+        const m = otherPlayers[id];
+        ctx.beginPath();
+        ctx.arc(center + m.position.x * scale, center + m.position.z * scale, 4, 0, Math.PI * 2);
+        ctx.fill();
+      });
+    }
+
+    // --- WIN CONDITIONS & RACE FINISH ---
     function startRaceSystem(mode = 'solo') {
       document.getElementById('main-menu').style.display = 'none';
       document.getElementById('lobby-menu').style.display = 'none';
       document.getElementById('results-panel').style.display = 'none';
       document.getElementById('hud').style.display = 'flex';
-      document.getElementById('player-count').innerText = mode === 'solo' ? 'Solo Practice' : 'Multiplayer';
+      document.getElementById('minimap-card').style.display = 'block';
 
       resetCarToStartLine();
       if (playerCarMesh) {
@@ -629,10 +762,12 @@
       currentLap = 1;
       nextCheckpointIndex = 1;
       nitroFuel = 100;
+      bestLapTime = Infinity;
       document.getElementById('current-lap').innerText = 1;
       document.getElementById('total-laps').innerText = TOTAL_LAPS;
+      document.getElementById('best-lap-val').innerText = '--:--.--';
 
-      // Start Countdown
+      // Countdown
       raceState = 'countdown';
       const cdOverlay = document.getElementById('countdown-overlay');
       cdOverlay.style.display = 'block';
@@ -647,6 +782,7 @@
           cdOverlay.innerText = 'GO!';
           raceState = 'racing';
           raceStartTime = Date.now();
+          lapStartTime = Date.now();
         } else {
           cdOverlay.style.display = 'none';
           clearInterval(timer);
@@ -656,14 +792,29 @@
 
     function finishRace() {
       raceState = 'finished';
-      const prize = 500 + (gameState.selectedCar === 'rookie' ? 200 : 400);
-      gameState.cash += prize;
+
+      // Determine Victory Tier & Rewards
+      const isWinner = racePosition === 1;
+      const basePrize = isWinner ? 1000 : 400;
+      const carBonus = gameState.selectedCar === 'rookie' ? 300 : 100;
+      const totalPrize = basePrize + carBonus;
+
+      gameState.cash += totalPrize;
       updateCashDisplay();
 
+      // UI Banner Updates
+      const banner = document.getElementById('winner-banner');
+      banner.innerText = isWinner ? 'VICTORY!' : 'RACE FINISHED';
+      banner.className = `winner-badge ${isWinner ? 'winner-gold' : 'winner-silver'}`;
+      
+      const posStr = racePosition === 1 ? '1st Place' : racePosition === 2 ? '2nd Place' : `${racePosition}th Place`;
+      document.getElementById('final-place-txt').innerText = posStr;
+
       document.getElementById('hud').style.display = 'none';
+      document.getElementById('minimap-card').style.display = 'none';
       document.getElementById('results-panel').style.display = 'block';
       document.getElementById('final-time-display').innerText = document.getElementById('race-timer').innerText;
-      document.getElementById('prize-amount').innerText = prize;
+      document.getElementById('prize-amount').innerText = totalPrize;
     }
 
     // --- MULTIPLAYER ROOMS ---
@@ -705,7 +856,16 @@
 
     function broadcastState() {
       if (peerConn && peerConn.open) {
-        peerConn.send({ id: peer.id, x: carState.x, y: carState.y, z: carState.z, angle: carState.angle, carType: gameState.selectedCar });
+        peerConn.send({ 
+          id: peer.id, 
+          x: carState.x, 
+          y: carState.y, 
+          z: carState.z, 
+          angle: carState.angle, 
+          carType: gameState.selectedCar,
+          lap: currentLap,
+          cp: nextCheckpointIndex
+        });
       }
     }
 
@@ -718,12 +878,13 @@
       }
       otherPlayers[data.id].position.set(data.x, data.y, data.z);
       otherPlayers[data.id].rotation.y = data.angle;
+      otherPlayers[data.id].raceData = { lap: data.lap, cp: data.cp };
     }
 
     function animate() {
       requestAnimationFrame(animate);
       updatePhysics();
-      updateNitroParticles();
+      updateParticles();
       broadcastState();
       composer.render();
     }
@@ -747,6 +908,7 @@
       document.getElementById('shop-panel').style.display = 'none';
       document.getElementById('results-panel').style.display = 'none';
       document.getElementById('hud').style.display = 'none';
+      document.getElementById('minimap-card').style.display = 'none';
       updateCashDisplay();
     }
 
