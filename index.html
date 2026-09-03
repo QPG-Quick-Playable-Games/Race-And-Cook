@@ -209,14 +209,17 @@
         ground: 0x090d16,
         trackColor: 0x18181b,
         barrierColor: 0x38bdf8,
+        obstacleType: 'neon_barricade',
+        obstacleColor: 0x38bdf8,
         points: [
           new THREE.Vector3(0, 0, 0),
-          new THREE.Vector3(80, 0, 60),
-          new THREE.Vector3(160, 0, 0),
-          new THREE.Vector3(120, 0, -100),
-          new THREE.Vector3(0, 0, -120),
-          new THREE.Vector3(-80, 0, -60),
-          new THREE.Vector3(-50, 0, 30)
+          new THREE.Vector3(100, 0, 40),
+          new THREE.Vector3(150, 0, -50),
+          new THREE.Vector3(80, 0, -140),
+          new THREE.Vector3(0, 0, -90),
+          new THREE.Vector3(-90, 0, -150),
+          new THREE.Vector3(-120, 0, -40),
+          new THREE.Vector3(-40, 0, 40)
         ]
       },
       desert: {
@@ -226,14 +229,17 @@
         ground: 0x78350f,
         trackColor: 0x292524,
         barrierColor: 0xf59e0b,
+        obstacleType: 'cactus',
+        obstacleColor: 0x15803d,
         points: [
           new THREE.Vector3(0, 0, 0),
-          new THREE.Vector3(120, 0, 40),
-          new THREE.Vector3(140, 0, -120),
-          new THREE.Vector3(20, 0, -160),
-          new THREE.Vector3(-60, 0, -80),
-          new THREE.Vector3(-120, 0, -140),
-          new THREE.Vector3(-100, 0, 20)
+          new THREE.Vector3(160, 0, 30),
+          new THREE.Vector3(220, 0, -80),
+          new THREE.Vector3(140, 0, -180),
+          new THREE.Vector3(-60, 0, -180),
+          new THREE.Vector3(-150, 0, -100),
+          new THREE.Vector3(-140, 0, 10),
+          new THREE.Vector3(-60, 0, 50)
         ]
       },
       cyber: {
@@ -243,14 +249,16 @@
         ground: 0x030712,
         trackColor: 0x0f172a,
         barrierColor: 0xc084fc,
+        obstacleType: 'glitch_spike',
+        obstacleColor: 0xc084fc,
         points: [
           new THREE.Vector3(0, 0, 0),
-          new THREE.Vector3(60, 0, 90),
-          new THREE.Vector3(120, 0, 90),
-          new THREE.Vector3(150, 0, 0),
-          new THREE.Vector3(100, 0, -80),
-          new THREE.Vector3(-40, 0, -80),
-          new THREE.Vector3(-100, 0, 0)
+          new THREE.Vector3(70, 0, 100),
+          new THREE.Vector3(140, 0, 30),
+          new THREE.Vector3(40, 0, -60),
+          new THREE.Vector3(-40, 0, 60),
+          new THREE.Vector3(-140, 0, -30),
+          new THREE.Vector3(-70, 0, -100)
         ]
       }
     };
@@ -267,6 +275,8 @@
     let playerCarMesh, trackCurve;
     let trackObjectsGroup = new THREE.Group();
     let environmentGroup = new THREE.Group();
+    let obstaclesGroup = new THREE.Group();
+    let obstaclesData = [];
     let otherPlayers = {};
     let carState = { x: 0, y: 0.3, z: 0, speed: 0, angle: 0 };
     const keys = { Forward: false, Backward: false, Left: false, Right: false, Nitro: false };
@@ -312,6 +322,7 @@
       scene = new THREE.Scene();
       scene.add(trackObjectsGroup);
       scene.add(environmentGroup);
+      scene.add(obstaclesGroup);
 
       camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 1000);
 
@@ -343,9 +354,11 @@
     }
 
     function loadSelectedMap() {
-      // Clear old Track & Sky
+      // Clear old Track, Sky, & Obstacles
       while(trackObjectsGroup.children.length > 0) trackObjectsGroup.remove(trackObjectsGroup.children[0]);
       while(environmentGroup.children.length > 0) environmentGroup.remove(environmentGroup.children[0]);
+      while(obstaclesGroup.children.length > 0) obstaclesGroup.remove(obstaclesGroup.children[0]);
+      obstaclesData = [];
 
       const mapConfig = MAPS[gameState.currentMap];
 
@@ -370,8 +383,76 @@
 
       buildTrackWithBoundariesAndWalls(mapConfig);
       buildUpgradedBackground(mapConfig);
+      buildMapObstacles(mapConfig);
       createStartFinishGate();
       resetCarToStartLine();
+    }
+
+    function buildMapObstacles(mapConfig) {
+      const numObstacles = 12;
+      const step = 1 / numObstacles;
+
+      for (let i = 1; i < numObstacles; i++) {
+        const u = i * step;
+        const pt = trackCurve.getPointAt(u);
+        const tangent = trackCurve.getTangentAt(u);
+        const normal = new THREE.Vector3(-tangent.z, 0, tangent.x).normalize();
+
+        const laneOffset = ((i % 3) - 1) * (TRACK_WIDTH * 0.45);
+        const pos = pt.clone().add(normal.multiplyScalar(laneOffset));
+
+        let obstacleMesh;
+        let radius = 1.0;
+
+        if (mapConfig.obstacleType === 'neon_barricade') {
+          obstacleMesh = new THREE.Group();
+          const base = new THREE.Mesh(
+            new THREE.BoxGeometry(2.2, 0.6, 0.6),
+            new THREE.MeshStandardMaterial({ color: 0x1e293b, metalness: 0.8, roughness: 0.2 })
+          );
+          base.position.y = 0.3;
+          obstacleMesh.add(base);
+
+          const light = new THREE.Mesh(
+            new THREE.BoxGeometry(2.0, 0.2, 0.2),
+            new THREE.MeshBasicMaterial({ color: mapConfig.obstacleColor })
+          );
+          light.position.y = 0.7;
+          obstacleMesh.add(light);
+          radius = 1.2;
+        } else if (mapConfig.obstacleType === 'cactus') {
+          obstacleMesh = new THREE.Group();
+          const trunk = new THREE.Mesh(
+            new THREE.CylinderGeometry(0.35, 0.4, 1.8, 8),
+            new THREE.MeshStandardMaterial({ color: mapConfig.obstacleColor, roughness: 0.9 })
+          );
+          trunk.position.y = 0.9;
+          obstacleMesh.add(trunk);
+
+          const arm = new THREE.Mesh(
+            new THREE.BoxGeometry(1.2, 0.3, 0.3),
+            new THREE.MeshStandardMaterial({ color: mapConfig.obstacleColor, roughness: 0.9 })
+          );
+          arm.position.y = 1.1;
+          obstacleMesh.add(arm);
+          radius = 0.9;
+        } else {
+          obstacleMesh = new THREE.Mesh(
+            new THREE.ConeGeometry(0.8, 1.6, 6),
+            new THREE.MeshBasicMaterial({ color: mapConfig.obstacleColor, wireframe: true })
+          );
+          obstacleMesh.position.y = 0.8;
+          radius = 0.8;
+        }
+
+        obstacleMesh.position.copy(pos);
+        if (mapConfig.obstacleType === 'neon_barricade') {
+          obstacleMesh.rotation.y = Math.atan2(tangent.x, tangent.z);
+        }
+
+        obstaclesGroup.add(obstacleMesh);
+        obstaclesData.push({ position: pos, radius: radius, mesh: obstacleMesh });
+      }
     }
 
     function initAudio() {
@@ -817,6 +898,22 @@
       });
     }
 
+    function checkObstacleCollisions() {
+      for (let i = 0; i < obstaclesData.length; i++) {
+        const obs = obstaclesData[i];
+        const dist = Math.hypot(carState.x - obs.position.x, carState.z - obs.position.z);
+        if (dist < obs.radius + 0.8) {
+          carState.speed = -carState.speed * 0.5;
+          playSound(150, 0.25);
+          triggerSmokeParticles();
+
+          carState.x -= Math.sin(carState.angle) * 0.4;
+          carState.z -= Math.cos(carState.angle) * 0.4;
+          break;
+        }
+      }
+    }
+
     function updatePhysics() {
       if (raceState !== 'racing') return;
 
@@ -878,6 +975,7 @@
       }
 
       checkCarCollisions();
+      checkObstacleCollisions();
 
       if (playerCarMesh) {
         playerCarMesh.position.set(carState.x, carState.y, carState.z);
