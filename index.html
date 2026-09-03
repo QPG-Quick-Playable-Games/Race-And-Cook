@@ -6,7 +6,7 @@
   <title>Apex Racer 3D - Earth Circuit</title>
   <style>
     * { margin: 0; padding: 0; box-sizing: border-box; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; user-select: none; touch-action: none; }
-    body, html { width: 100%; height: 100%; overflow: hidden; background-color: #87ceeb; color: #fff; }
+    body, html { width: 100%; height: 100%; overflow: hidden; background-color: #030712; color: #fff; }
     #canvas-container { width: 100%; height: 100%; position: absolute; top: 0; left: 0; z-index: 1; }
     
     .ui-layer { position: absolute; top: 0; left: 0; width: 100%; height: 100%; z-index: 10; pointer-events: none; display: flex; flex-direction: column; justify-content: space-between; }
@@ -197,6 +197,9 @@
     let nitroParticles = [];
     let smokeParticles = [];
 
+    // Animated Environment Elements
+    let cloudsGroup;
+
     // Race System State
     const TOTAL_LAPS = 3;
     let currentLap = 1;
@@ -224,19 +227,20 @@
       renderer.shadowMap.enabled = true;
       renderer.shadowMap.type = THREE.PCFSoftShadowMap;
       renderer.toneMapping = THREE.ACESFilmicToneMapping;
-      renderer.toneMappingExposure = 1.1;
+      renderer.toneMappingExposure = 1.25;
       container.appendChild(renderer.domElement);
 
       scene = new THREE.Scene();
-      scene.background = new THREE.Color(0x87ceeb);
-      scene.fog = new THREE.FogExp2(0xa0d8ef, 0.005);
+      scene.background = new THREE.Color(0x0a0f24);
+      scene.fog = new THREE.FogExp2(0x131a36, 0.0035);
 
       camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 1000);
 
-      const ambientLight = new THREE.AmbientLight(0xffffff, 0.65);
+      // --- IMPROVED LIGHTING SETUP ---
+      const ambientLight = new THREE.AmbientLight(0xdbeafe, 0.5);
       scene.add(ambientLight);
 
-      const sun = new THREE.DirectionalLight(0xfffbeb, 1.8);
+      const sun = new THREE.DirectionalLight(0xffedd5, 2.2);
       sun.position.set(120, 150, 80);
       sun.castShadow = true;
       sun.shadow.mapSize.width = 2048;
@@ -248,18 +252,18 @@
       sun.shadow.camera.top = d; sun.shadow.camera.bottom = -d;
       scene.add(sun);
 
-      const hemiLight = new THREE.HemisphereLight(0x87ceeb, 0x3d7034, 0.4);
+      const hemiLight = new THREE.HemisphereLight(0x38bdf8, 0x1e1b4b, 0.7);
       scene.add(hemiLight);
 
       const renderScene = new THREE.RenderPass(scene, camera);
-      const bloomPass = new THREE.UnrealBloomPass(new THREE.Vector2(window.innerWidth, window.innerHeight), 0.25, 0.4, 0.9);
+      const bloomPass = new THREE.UnrealBloomPass(new THREE.Vector2(window.innerWidth, window.innerHeight), 0.45, 0.5, 0.85);
 
       composer = new THREE.EffectComposer(renderer);
       composer.addPass(renderScene);
       composer.addPass(bloomPass);
 
-      buildTrackWithBoundaries();
-      buildEnvironment();
+      buildTrackWithBoundariesAndWalls();
+      buildUpgradedBackground();
       createStartFinishGate();
       initParticles();
       
@@ -298,7 +302,7 @@
       gainNode.gain.setTargetAtTime(0.08, audioCtx.currentTime, 0.1);
     }
 
-    function buildTrackWithBoundaries() {
+    function buildTrackWithBoundariesAndWalls() {
       trackCurve = new THREE.CatmullRomCurve3([
         new THREE.Vector3(0, 0, 0),
         new THREE.Vector3(80, 0, 60),
@@ -309,11 +313,12 @@
         new THREE.Vector3(-50, 0, 30)
       ], true);
 
-      trackSamplePoints = trackCurve.getPoints(400);
+      const numSamples = 400;
+      trackSamplePoints = trackCurve.getPoints(numSamples);
 
       checkpointPositions = [];
-      const cpGateGeo = new THREE.TorusGeometry(TRACK_WIDTH, 0.2, 8, 24);
-      const cpGateMat = new THREE.MeshBasicMaterial({ color: 0x38bdf8, transparent: true, opacity: 0.4 });
+      const cpGateGeo = new THREE.TorusGeometry(TRACK_WIDTH, 0.25, 8, 24);
+      const cpGateMat = new THREE.MeshBasicMaterial({ color: 0x38bdf8, transparent: true, opacity: 0.5 });
 
       for (let i = 0; i < 8; i++) {
         const u = i / 8;
@@ -329,20 +334,183 @@
         checkpointVisuals.push(ring);
       }
 
-      const trackGeo = new THREE.TubeGeometry(trackCurve, 150, TRACK_WIDTH, 12, true);
-      const trackMat = new THREE.MeshStandardMaterial({ color: 0x262626, roughness: 0.7 });
+      // Asphalt Surface
+      const trackGeo = new THREE.TubeGeometry(trackCurve, 200, TRACK_WIDTH, 12, true);
+      const trackMat = new THREE.MeshStandardMaterial({ color: 0x18181b, roughness: 0.5, metalness: 0.2 });
       const trackMesh = new THREE.Mesh(trackGeo, trackMat);
       trackMesh.scale.set(1, 0.02, 1);
       trackMesh.position.y = -0.08;
       trackMesh.receiveShadow = true;
       scene.add(trackMesh);
 
-      const curbGeo = new THREE.TubeGeometry(trackCurve, 150, TRACK_WIDTH + 0.4, 8, true);
-      const curbMat = new THREE.MeshStandardMaterial({ color: 0xd97706, roughness: 0.4 });
+      // Red-and-White Curbs
+      const curbGeo = new THREE.TubeGeometry(trackCurve, 200, TRACK_WIDTH + 0.35, 8, true);
+      const curbMat = new THREE.MeshStandardMaterial({ color: 0xef4444, roughness: 0.3 });
       const curbMesh = new THREE.Mesh(curbGeo, curbMat);
       curbMesh.scale.set(1, 0.015, 1);
       curbMesh.position.y = -0.09;
       scene.add(curbMesh);
+
+      // --- VISIBLE HIGH-TECH BOUNDARY WALLS ---
+      const wallHeight = 1.8;
+      const wallOffset = TRACK_WIDTH + 0.1;
+
+      // Materials for track barriers
+      const barrierBaseMat = new THREE.MeshStandardMaterial({ color: 0x0f172a, roughness: 0.3, metalness: 0.8 });
+      const glassMat = new THREE.MeshPhysicalMaterial({
+        color: 0x38bdf8,
+        transparent: true,
+        opacity: 0.35,
+        roughness: 0.1,
+        metalness: 0.1,
+        transmission: 0.6,
+        ior: 1.2
+      });
+      const neonTrimMat = new THREE.MeshBasicMaterial({ color: 0x38bdf8 });
+
+      // Build wall segments along the track curves
+      for (let side of [-1, 1]) {
+        for (let i = 0; i < numSamples; i++) {
+          const u1 = i / numSamples;
+          const u2 = ((i + 1) % numSamples) / numSamples;
+
+          const pt1 = trackCurve.getPointAt(u1);
+          const pt2 = trackCurve.getPointAt(u2);
+
+          const tan1 = trackCurve.getTangentAt(u1);
+          const tan2 = trackCurve.getTangentAt(u2);
+
+          const norm1 = new THREE.Vector3(-tan1.z, 0, tan1.x).normalize();
+          const norm2 = new THREE.Vector3(-tan2.z, 0, tan2.x).normalize();
+
+          const wPt1 = pt1.clone().add(norm1.clone().multiplyScalar(side * wallOffset));
+          const wPt2 = pt2.clone().add(norm2.clone().multiplyScalar(side * wallOffset));
+
+          const dist = wPt1.distanceTo(wPt2);
+          const midPoint = wPt1.clone().add(wPt2).multiplyScalar(0.5);
+          const angle = Math.atan2(wPt2.x - wPt1.x, wPt2.z - wPt1.z);
+
+          // Base barrier block
+          const baseGeo = new THREE.BoxGeometry(0.3, 0.5, dist + 0.05);
+          const baseMesh = new THREE.Mesh(baseGeo, barrierBaseMat);
+          baseMesh.position.set(midPoint.x, 0.25, midPoint.z);
+          baseMesh.rotation.y = angle;
+          baseMesh.castShadow = true;
+          scene.add(baseMesh);
+
+          // Semi-transparent glowing glass panel
+          const glassGeo = new THREE.BoxGeometry(0.12, wallHeight - 0.5, dist + 0.05);
+          const glassMesh = new THREE.Mesh(glassGeo, glassMat);
+          glassMesh.position.set(midPoint.x, 0.5 + (wallHeight - 0.5) / 2, midPoint.z);
+          glassMesh.rotation.y = angle;
+          scene.add(glassMesh);
+
+          // Neon Edge Trim
+          const neonGeo = new THREE.BoxGeometry(0.16, 0.08, dist + 0.05);
+          const neonMesh = new THREE.Mesh(neonGeo, neonTrimMat);
+          neonMesh.position.set(midPoint.x, wallHeight + 0.04, midPoint.z);
+          neonMesh.rotation.y = angle;
+          scene.add(neonMesh);
+
+          // Support Pillars every 5 segments
+          if (i % 5 === 0) {
+            const pillarGeo = new THREE.BoxGeometry(0.4, wallHeight + 0.2, 0.4);
+            const pillarMesh = new THREE.Mesh(pillarGeo, barrierBaseMat);
+            pillarMesh.position.set(wPt1.x, (wallHeight + 0.2) / 2, wPt1.z);
+            pillarMesh.rotation.y = angle;
+            pillarMesh.castShadow = true;
+            scene.add(pillarMesh);
+          }
+        }
+      }
+    }
+
+    function buildUpgradedBackground() {
+      // Atmospheric Sky Box (Gradient Sphere)
+      const skyGeo = new THREE.SphereGeometry(600, 32, 15);
+      const skyMat = new THREE.ShaderMaterial({
+        uniforms: {
+          topColor: { value: new THREE.Color(0x0f172a) },
+          bottomColor: { value: new THREE.Color(0xf43f5e) },
+          offset: { value: 20 },
+          exponent: { value: 0.6 }
+        },
+        vertexShader: `
+          varying vec3 vWorldPosition;
+          void main() {
+            vec4 worldPosition = modelMatrix * vec4(position, 1.0);
+            vWorldPosition = worldPosition.xyz;
+            gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+          }
+        `,
+        fragmentShader: `
+          uniform vec3 topColor;
+          uniform vec3 bottomColor;
+          uniform float offset;
+          uniform float exponent;
+          varying vec3 vWorldPosition;
+          void main() {
+            float h = normalize(vWorldPosition + offset).y;
+            gl_FragColor = vec4(mix(bottomColor, topColor, max(pow(max(h, 0.0), exponent), 0.0)), 1.0);
+          }
+        `,
+        side: THREE.BackSide
+      });
+      scene.add(new THREE.Mesh(skyGeo, skyMat));
+
+      // Stylized Terrain / Field Ground Plane
+      const groundGeo = new THREE.PlaneGeometry(1200, 1200, 64, 64);
+      const groundMat = new THREE.MeshStandardMaterial({ 
+        color: 0x090d16, 
+        roughness: 0.9, 
+        metalness: 0.1 
+      });
+      const ground = new THREE.Mesh(groundGeo, groundMat);
+      ground.rotation.x = -Math.PI / 2;
+      ground.position.y = -0.15;
+      ground.receiveShadow = true;
+      scene.add(ground);
+
+      // Distant Mountain Ranges
+      const mountainGeo = new THREE.ConeGeometry(80, 120, 5);
+      const mountainMat = new THREE.MeshStandardMaterial({ color: 0x1e1b4b, roughness: 0.9 });
+      for (let i = 0; i < 24; i++) {
+        const m = new THREE.Mesh(mountainGeo, mountainMat);
+        const rad = 350 + Math.random() * 80;
+        const ang = (i / 24) * Math.PI * 2;
+        m.position.set(Math.cos(ang) * rad, 40, Math.sin(ang) * rad);
+        m.scale.set(1 + Math.random() * 0.5, 0.8 + Math.random() * 0.6, 1 + Math.random() * 0.5);
+        scene.add(m);
+      }
+
+      // 3D Volumetric Floating Clouds
+      cloudsGroup = new THREE.Group();
+      const cloudMat = new THREE.MeshStandardMaterial({ color: 0xf8fafc, transparent: true, opacity: 0.6, roughness: 1.0 });
+      for (let c = 0; c < 28; c++) {
+        const cloud = new THREE.Group();
+        const numPuffs = 4 + Math.floor(Math.random() * 4);
+        for (let p = 0; p < numPuffs; p++) {
+          const puffGeo = new THREE.SphereGeometry(12 + Math.random() * 10, 8, 8);
+          const puff = new THREE.Mesh(puffGeo, cloudMat);
+          puff.position.set((Math.random() - 0.5) * 25, (Math.random() - 0.5) * 6, (Math.random() - 0.5) * 25);
+          cloud.add(puff);
+        }
+        const angle = Math.random() * Math.PI * 2;
+        const dist = 100 + Math.random() * 250;
+        cloud.position.set(Math.cos(angle) * dist, 60 + Math.random() * 30, Math.sin(angle) * dist);
+        cloudsGroup.add(cloud);
+      }
+      scene.add(cloudsGroup);
+
+      // Distant Sci-Fi Beacon Light Pillars
+      for (let b = 0; b < 6; b++) {
+        const pillarGeo = new THREE.CylinderGeometry(0.8, 0.8, 200, 8);
+        const pillarMat = new THREE.MeshBasicMaterial({ color: 0x38bdf8, transparent: true, opacity: 0.25 });
+        const pillar = new THREE.Mesh(pillarGeo, pillarMat);
+        const ang = (b / 6) * Math.PI * 2 + 0.3;
+        pillar.position.set(Math.cos(ang) * 220, 100, Math.sin(ang) * 220);
+        scene.add(pillar);
+      }
     }
 
     function resetCarToStartLine() {
@@ -474,16 +642,6 @@
           if (s.life <= 0) s.mesh.visible = false;
         }
       });
-    }
-
-    function buildEnvironment() {
-      const groundGeo = new THREE.PlaneGeometry(800, 800);
-      const groundMat = new THREE.MeshStandardMaterial({ color: 0x3d7034, roughness: 0.9 });
-      const ground = new THREE.Mesh(groundGeo, groundMat);
-      ground.rotation.x = -Math.PI / 2;
-      ground.position.y = -0.15;
-      ground.receiveShadow = true;
-      scene.add(ground);
     }
 
     function createStartFinishGate() {
@@ -737,6 +895,9 @@
       
       updateAudio();
       renderMinimap();
+
+      // Rotate clouds slowly in background
+      if (cloudsGroup) cloudsGroup.rotation.y += 0.0003;
     }
 
     function calculateRacePosition() {
