@@ -24,16 +24,21 @@
     .nitro-bar { width: 100%; height: 100%; background: linear-gradient(90deg, #3b82f6, #06b6d4); transition: width 0.1s linear; }
     .nitro-bar.active { background: linear-gradient(90deg, #f59e0b, #ef4444); }
 
-    /* Minimap UI */
-    #minimap-card { position: absolute; bottom: 20px; right: 20px; width: 120px; height: 120px; background: rgba(15, 23, 42, 0.85); border: 2px solid rgba(255,255,255,0.2); border-radius: 50%; overflow: hidden; display: none; z-index: 12; }
+    /* Minimap UI (Positioned Top-Right to avoid controls overlap) */
+    #minimap-card { position: absolute; top: 85px; right: 15px; width: 110px; height: 110px; background: rgba(15, 23, 42, 0.85); border: 2px solid rgba(255,255,255,0.2); border-radius: 50%; overflow: hidden; display: none; z-index: 12; }
     #minimap-canvas { width: 100%; height: 100%; }
 
     /* Countdown & Announcements */
     #countdown-overlay { position: absolute; top: 40%; left: 50%; transform: translate(-50%, -50%); font-size: 5rem; font-weight: 900; font-style: italic; color: #38bdf8; text-shadow: 0 0 20px rgba(56,189,248,0.8); display: none; text-align: center; }
 
-    /* Mobile Touch Controls */
-    #touch-controls { display: none; width: 100%; padding: 20px; justify-content: space-between; align-items: flex-end; }
-    .touch-cluster { display: flex; gap: 12px; }
+    /* Mobile Touch Joystick & Action Buttons */
+    #touch-controls { display: none; width: 100%; padding: 25px; justify-content: space-between; align-items: flex-end; z-index: 15; }
+    
+    /* Virtual Joystick */
+    #joystick-zone { width: 120px; height: 120px; background: rgba(255, 255, 255, 0.15); border: 2px solid rgba(255, 255, 255, 0.3); border-radius: 50%; backdrop-filter: blur(8px); position: relative; display: flex; align-items: center; justify-content: center; }
+    #joystick-knob { width: 50px; height: 50px; background: rgba(56, 189, 248, 0.8); border: 2px solid rgba(255, 255, 255, 0.8); border-radius: 50%; position: absolute; box-shadow: 0 0 10px rgba(56,189,248,0.5); pointer-events: none; }
+
+    .touch-cluster { display: flex; gap: 12px; align-items: center; }
     .touch-btn { width: 65px; height: 65px; border-radius: 50%; background: rgba(255, 255, 255, 0.2); backdrop-filter: blur(8px); border: 2px solid rgba(255, 255, 255, 0.4); color: white; font-size: 1.5rem; font-weight: bold; display: flex; align-items: center; justify-content: center; }
     .touch-btn-gas { background: rgba(34, 197, 94, 0.4); border-color: rgba(34, 197, 94, 0.8); }
     .touch-btn-brake { background: rgba(239, 68, 68, 0.4); border-color: rgba(239, 68, 68, 0.8); }
@@ -99,17 +104,16 @@
       </div>
     </div>
 
-    <!-- Minimap UI -->
+    <!-- Minimap UI (Shifted to Top-Right below HUD) -->
     <div id="minimap-card"><canvas id="minimap-canvas"></canvas></div>
 
     <!-- Countdown Text Overlay -->
     <div id="countdown-overlay">3</div>
 
-    <!-- Mobile Controls -->
+    <!-- Touch Joystick & Action Buttons -->
     <div id="touch-controls" class="interactive">
-      <div class="touch-cluster">
-        <div class="touch-btn" id="btn-left">◀</div>
-        <div class="touch-btn" id="btn-right">▶</div>
+      <div id="joystick-zone">
+        <div id="joystick-knob"></div>
       </div>
       <div class="touch-cluster">
         <div class="touch-btn touch-btn-nitro" id="btn-nitro">NITRO</div>
@@ -156,7 +160,7 @@
       <button class="btn btn-secondary" onclick="showMainMenu()">Back</button>
     </div>
 
-    <!-- Race Finish Results Overlay (Win Conditions System) -->
+    <!-- Race Finish Results Overlay -->
     <div id="results-panel" class="menu-panel interactive" style="display:none;">
       <div id="winner-banner" class="winner-badge winner-gold">VICTORY!</div>
       <p style="font-size: 0.85rem; color: #94a3b8;">Final Placement: <span id="final-place-txt" style="color:#fff; font-weight:bold;">1st Place</span></p>
@@ -181,7 +185,10 @@
     let carState = { x: 0, y: 0.3, z: 0, speed: 0, angle: 0 };
     const keys = { Forward: false, Backward: false, Left: false, Right: false, Nitro: false };
     
-    // Audio Synth Engine
+    // Joystick Input State
+    let joystickVector = { x: 0, y: 0 };
+
+    // Audio Engine
     let audioCtx, engineOsc, gainNode;
 
     // Nitro System State
@@ -194,7 +201,7 @@
     const TOTAL_LAPS = 3;
     let currentLap = 1;
     let nextCheckpointIndex = 1;
-    let raceState = 'menu'; // 'menu', 'countdown', 'racing', 'finished'
+    let raceState = 'menu';
     let raceStartTime = 0;
     let lapStartTime = 0;
     let bestLapTime = Infinity;
@@ -226,7 +233,6 @@
 
       camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 1000);
 
-      // Lighting
       const ambientLight = new THREE.AmbientLight(0xffffff, 0.65);
       scene.add(ambientLight);
 
@@ -257,7 +263,6 @@
       createStartFinishGate();
       initParticles();
       
-      // Initial Car Spawn
       resetCarToStartLine();
       createPlayerCar();
 
@@ -267,7 +272,6 @@
       animate();
     }
 
-    // --- AUDIO SYNTHESIZER ---
     function initAudio() {
       const AudioCtx = window.AudioContext || window.webkitAudioContext;
       if (!AudioCtx) return;
@@ -294,7 +298,6 @@
       gainNode.gain.setTargetAtTime(0.08, audioCtx.currentTime, 0.1);
     }
 
-    // --- TRACK & CHECKPOINTS ---
     function buildTrackWithBoundaries() {
       trackCurve = new THREE.CatmullRomCurve3([
         new THREE.Vector3(0, 0, 0),
@@ -308,7 +311,6 @@
 
       trackSamplePoints = trackCurve.getPoints(400);
 
-      // Setup Checkpoint Rings
       checkpointPositions = [];
       const cpGateGeo = new THREE.TorusGeometry(TRACK_WIDTH, 0.2, 8, 24);
       const cpGateMat = new THREE.MeshBasicMaterial({ color: 0x38bdf8, transparent: true, opacity: 0.4 });
@@ -327,7 +329,6 @@
         checkpointVisuals.push(ring);
       }
 
-      // Track Meshes
       const trackGeo = new THREE.TubeGeometry(trackCurve, 150, TRACK_WIDTH, 12, true);
       const trackMat = new THREE.MeshStandardMaterial({ color: 0x262626, roughness: 0.7 });
       const trackMesh = new THREE.Mesh(trackGeo, trackMat);
@@ -355,7 +356,6 @@
       carState.angle = Math.atan2(tangent.x, tangent.z);
     }
 
-    // --- CAR CREATION ---
     function createCarMesh(colorHex) {
       const carGroup = new THREE.Group();
 
@@ -417,7 +417,6 @@
       scene.add(playerCarMesh);
     }
 
-    // --- PARTICLE FX SYSTEMS ---
     function initParticles() {
       const pGeo = new THREE.SphereGeometry(0.08, 6, 6);
       const nitroMat = new THREE.MeshBasicMaterial({ color: 0x38bdf8, transparent: true, opacity: 0.8 });
@@ -477,7 +476,6 @@
       });
     }
 
-    // --- ENVIRONMENT ---
     function buildEnvironment() {
       const groundGeo = new THREE.PlaneGeometry(800, 800);
       const groundMat = new THREE.MeshStandardMaterial({ color: 0x3d7034, roughness: 0.9 });
@@ -507,7 +505,7 @@
       scene.add(gateGroup);
     }
 
-    // --- CONTROLS ---
+    // --- CONTROLS SETUP & JOYSTICK LOGIC ---
     function setupControls() {
       window.addEventListener('keydown', (e) => {
         if (audioCtx && audioCtx.state === 'suspended') audioCtx.resume();
@@ -517,6 +515,8 @@
 
       if (isTouch) {
         document.getElementById('touch-controls').style.display = 'flex';
+        
+        // Setup Action Buttons
         const bindTouch = (id, key) => {
           const el = document.getElementById(id);
           el.addEventListener('touchstart', (e) => { 
@@ -528,10 +528,66 @@
         };
         bindTouch('btn-gas', 'Forward');
         bindTouch('btn-brake', 'Backward');
-        bindTouch('btn-left', 'Left');
-        bindTouch('btn-right', 'Right');
         bindTouch('btn-nitro', 'Nitro');
+
+        // Setup Touch Joystick
+        setupJoystick();
       }
+    }
+
+    function setupJoystick() {
+      const zone = document.getElementById('joystick-zone');
+      const knob = document.getElementById('joystick-knob');
+      const maxRadius = 40;
+      let activeTouchId = null;
+
+      const handleTouchMove = (e) => {
+        for (let i = 0; i < e.changedTouches.length; i++) {
+          const touch = e.changedTouches[i];
+          if (touch.identifier === activeTouchId) {
+            const rect = zone.getBoundingClientRect();
+            const centerX = rect.left + rect.width / 2;
+            const centerY = rect.top + rect.height / 2;
+
+            let deltaX = touch.clientX - centerX;
+            let deltaY = touch.clientY - centerY;
+            let dist = Math.hypot(deltaX, deltaY);
+
+            if (dist > maxRadius) {
+              deltaX = (deltaX / dist) * maxRadius;
+              deltaY = (deltaY / dist) * maxRadius;
+            }
+
+            knob.style.transform = `translate(${deltaX}px, ${deltaY}px)`;
+            joystickVector.x = deltaX / maxRadius;
+            joystickVector.y = deltaY / maxRadius;
+          }
+        }
+      };
+
+      const handleTouchEnd = (e) => {
+        for (let i = 0; i < e.changedTouches.length; i++) {
+          if (e.changedTouches[i].identifier === activeTouchId) {
+            activeTouchId = null;
+            knob.style.transform = `translate(0px, 0px)`;
+            joystickVector.x = 0;
+            joystickVector.y = 0;
+          }
+        }
+      };
+
+      zone.addEventListener('touchstart', (e) => {
+        e.preventDefault();
+        if (audioCtx && audioCtx.state === 'suspended') audioCtx.resume();
+        if (activeTouchId === null) {
+          activeTouchId = e.changedTouches[0].identifier;
+          handleTouchMove(e);
+        }
+      });
+
+      window.addEventListener('touchmove', handleTouchMove, { passive: false });
+      window.addEventListener('touchend', handleTouchEnd);
+      window.addEventListener('touchcancel', handleTouchEnd);
     }
 
     function handleKey(code, state) {
@@ -555,20 +611,17 @@
       return Math.sqrt(minDistanceSq) <= TRACK_WIDTH - 0.8;
     }
 
-    // --- COLLISION DETECTOR (Car vs Car) ---
     function checkCarCollisions() {
       Object.keys(otherPlayers).forEach(id => {
         const otherMesh = otherPlayers[id];
         const dist = Math.hypot(carState.x - otherMesh.position.x, carState.z - otherMesh.position.z);
         if (dist < 1.8) {
-          // Bounce mechanics
           carState.speed = -carState.speed * 0.6;
           triggerSmokeParticles();
         }
       });
     }
 
-    // --- PHYSICS & GAME LOOP ---
     function updatePhysics() {
       if (raceState !== 'racing' && raceState !== 'menu') return;
 
@@ -594,18 +647,30 @@
       }
       nitroBarEl.style.width = `${nitroFuel}%`;
 
-      if (keys.Forward && raceState === 'racing') carState.speed = Math.min(carState.speed + currentAccel, currentTopSpeed);
-      else if (keys.Backward && raceState === 'racing') carState.speed = Math.max(carState.speed - currentAccel, -currentTopSpeed * 0.4);
-      else carState.speed *= 0.97;
+      // Acceleration (Supports Keyboard & Joystick Y-Axis)
+      const isGasPressed = keys.Forward || joystickVector.y < -0.2;
+      const isBrakePressed = keys.Backward || joystickVector.y > 0.3;
 
-      if (Math.abs(carState.speed) > 0.01) {
-        const dir = carState.speed > 0 ? 1 : -1;
-        if (keys.Left) carState.angle += activeCar.handling * dir;
-        if (keys.Right) carState.angle -= activeCar.handling * dir;
+      if (isGasPressed && raceState === 'racing') {
+        carState.speed = Math.min(carState.speed + currentAccel, currentTopSpeed);
+      } else if (isBrakePressed && raceState === 'racing') {
+        carState.speed = Math.max(carState.speed - currentAccel, -currentTopSpeed * 0.4);
+      } else {
+        carState.speed *= 0.97;
       }
 
-      // Drift Smoke Particle Effect
-      if (Math.abs(carState.speed) > 0.5 && (keys.Left || keys.Right)) {
+      // Steering (Supports Keyboard & Joystick X-Axis)
+      let turnFactor = 0;
+      if (keys.Left) turnFactor = 1;
+      else if (keys.Right) turnFactor = -1;
+      else if (Math.abs(joystickVector.x) > 0.1) turnFactor = -joystickVector.x;
+
+      if (Math.abs(carState.speed) > 0.01 && turnFactor !== 0) {
+        const dir = carState.speed > 0 ? 1 : -1;
+        carState.angle += activeCar.handling * dir * turnFactor;
+      }
+
+      if (Math.abs(carState.speed) > 0.5 && turnFactor !== 0) {
         triggerSmokeParticles();
       }
 
@@ -627,7 +692,6 @@
         playerCarMesh.rotation.y = carState.angle;
       }
 
-      // Camera
       const camOffset = new THREE.Vector3(
         carState.x - Math.sin(carState.angle) * 7.5,
         carState.y + 3.5,
@@ -638,12 +702,10 @@
 
       document.getElementById('speed-val').innerText = Math.floor(Math.abs(carState.speed) * 210);
 
-      // Race System Logic (Checkpoints & Laps)
       if (raceState === 'racing') {
         raceElapsedTime = Date.now() - raceStartTime;
         formatRaceTimer(raceElapsedTime);
 
-        // Highlight Active Ring Visual
         checkpointVisuals.forEach((ring, idx) => {
           ring.material.color.setHex(idx === nextCheckpointIndex ? 0xeab308 : 0x38bdf8);
         });
@@ -653,7 +715,7 @@
 
         if (distToCheckpoint < TRACK_WIDTH + 2) {
           nextCheckpointIndex = (nextCheckpointIndex + 1) % checkpointPositions.length;
-          if (nextCheckpointIndex === 1) { // Completed Lap
+          if (nextCheckpointIndex === 1) {
             const currentLapDuration = Date.now() - lapStartTime;
             if (currentLapDuration < bestLapTime) {
               bestLapTime = currentLapDuration;
@@ -670,7 +732,6 @@
           }
         }
 
-        // Leaderboard Calculation
         calculateRacePosition();
       }
       
@@ -705,7 +766,6 @@
       document.getElementById('race-timer').innerText = formatTimeMs(ms);
     }
 
-    // --- MINIMAP DISPLAY ---
     function renderMinimap() {
       if (raceState !== 'racing') return;
       const canvas = document.getElementById('minimap-canvas');
@@ -713,10 +773,9 @@
       const ctx = canvas.getContext('2d');
       ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-      const center = 60;
-      const scale = 0.35;
+      const center = 55;
+      const scale = 0.32;
 
-      // Draw Track Curve
       ctx.beginPath();
       ctx.strokeStyle = '#64748b';
       ctx.lineWidth = 4;
@@ -729,13 +788,11 @@
       ctx.closePath();
       ctx.stroke();
 
-      // Draw Player Dot
       ctx.fillStyle = '#38bdf8';
       ctx.beginPath();
       ctx.arc(center + carState.x * scale, center + carState.z * scale, 4, 0, Math.PI * 2);
       ctx.fill();
 
-      // Draw Opponents
       ctx.fillStyle = '#ef4444';
       Object.keys(otherPlayers).forEach(id => {
         const m = otherPlayers[id];
@@ -745,7 +802,6 @@
       });
     }
 
-    // --- WIN CONDITIONS & RACE FINISH ---
     function startRaceSystem(mode = 'solo') {
       document.getElementById('main-menu').style.display = 'none';
       document.getElementById('lobby-menu').style.display = 'none';
@@ -767,7 +823,6 @@
       document.getElementById('total-laps').innerText = TOTAL_LAPS;
       document.getElementById('best-lap-val').innerText = '--:--.--';
 
-      // Countdown
       raceState = 'countdown';
       const cdOverlay = document.getElementById('countdown-overlay');
       cdOverlay.style.display = 'block';
@@ -793,7 +848,6 @@
     function finishRace() {
       raceState = 'finished';
 
-      // Determine Victory Tier & Rewards
       const isWinner = racePosition === 1;
       const basePrize = isWinner ? 1000 : 400;
       const carBonus = gameState.selectedCar === 'rookie' ? 300 : 100;
@@ -802,7 +856,6 @@
       gameState.cash += totalPrize;
       updateCashDisplay();
 
-      // UI Banner Updates
       const banner = document.getElementById('winner-banner');
       banner.innerText = isWinner ? 'VICTORY!' : 'RACE FINISHED';
       banner.className = `winner-badge ${isWinner ? 'winner-gold' : 'winner-silver'}`;
@@ -817,7 +870,6 @@
       document.getElementById('prize-amount').innerText = totalPrize;
     }
 
-    // --- MULTIPLAYER ROOMS ---
     let peer, peerConn;
 
     function generateShortCode() {
