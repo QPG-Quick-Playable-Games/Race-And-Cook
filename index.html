@@ -50,6 +50,8 @@
     
     .btn { background: linear-gradient(135deg, #0284c7, #2563eb); border: none; color: white; padding: 12px 24px; border-radius: 12px; font-weight: 700; cursor: pointer; margin: 6px 0; width: 100%; font-size: 0.95rem; }
     .btn-secondary { background: rgba(255,255,255,0.1); border: 1px solid rgba(255,255,255,0.15); }
+    .btn-toggle { background: rgba(16, 185, 129, 0.2); border: 1px solid rgba(16, 185, 129, 0.5); color: #34d399; }
+    .btn-toggle.muted { background: rgba(239, 68, 68, 0.2); border-color: rgba(239, 68, 68, 0.5); color: #f87171; }
     
     input, select { width: 100%; padding: 12px; margin: 8px 0 12px; background: rgba(0,0,0,0.4); border: 1px solid rgba(255,255,255,0.2); border-radius: 8px; color: white; text-align: center; font-size: 1rem; text-transform: uppercase; letter-spacing: 1px; }
     select option { background: #0f172a; color: white; }
@@ -149,6 +151,7 @@
       <button class="btn" onclick="showLobby()">Play Multiplayer</button>
       <button class="btn btn-secondary" onclick="startRaceSystem('solo')">Solo Race (3 Laps)</button>
       <button class="btn btn-secondary" onclick="openShop()">Garage & Upgrades</button>
+      <button class="btn btn-toggle" id="main-mute-btn" onclick="toggleMute()">SFX & Music: ON</button>
       <div style="margin-top: 12px; color: #38bdf8; font-weight: bold; font-size: 0.9rem;">Cash: $<span id="menu-cash">0</span></div>
     </div>
 
@@ -170,6 +173,7 @@
     <div id="pause-menu" class="menu-panel interactive" style="display:none;">
       <h2>Game Paused</h2>
       <button class="btn" onclick="togglePause()">Resume</button>
+      <button class="btn btn-toggle" id="pause-mute-btn" onclick="toggleMute()">SFX & Music: ON</button>
       <button class="btn btn-secondary" onclick="showMainMenu()">Exit to Menu</button>
     </div>
 
@@ -282,7 +286,10 @@
     const keys = { Forward: false, Backward: false, Left: false, Right: false, Nitro: false };
     
     let joystickVector = { x: 0, y: 0 };
-    let audioCtx, engineOsc, gainNode, synthSound;
+    let audioCtx, engineOsc, engineFilter, gainNode;
+    let isMuted = false;
+    let bgmInterval = null;
+    let bgmNoteIndex = 0;
 
     let nitroFuel = 100;
     let isNitroActive = false;
@@ -354,7 +361,6 @@
     }
 
     function loadSelectedMap() {
-      // Clear old Track, Sky, & Obstacles
       while(trackObjectsGroup.children.length > 0) trackObjectsGroup.remove(trackObjectsGroup.children[0]);
       while(environmentGroup.children.length > 0) environmentGroup.remove(environmentGroup.children[0]);
       while(obstaclesGroup.children.length > 0) obstaclesGroup.remove(obstaclesGroup.children[0]);
@@ -365,7 +371,6 @@
       scene.background = new THREE.Color(mapConfig.sky);
       scene.fog = new THREE.FogExp2(mapConfig.sky, 0.003);
 
-      // Lighting
       const ambientLight = new THREE.AmbientLight(0xffffff, 0.6);
       environmentGroup.add(ambientLight);
 
@@ -461,23 +466,86 @@
       audioCtx = new AudioCtx();
       engineOsc = audioCtx.createOscillator();
       gainNode = audioCtx.createGain();
+      engineFilter = audioCtx.createBiquadFilter();
 
-      engineOsc.type = 'sawtooth';
-      engineOsc.frequency.setValueAtTime(40, audioCtx.currentTime);
+      // Milder engine sound using a filtered triangle wave
+      engineOsc.type = 'triangle';
+      engineFilter.type = 'lowpass';
+      engineFilter.frequency.setValueAtTime(400, audioCtx.currentTime);
+
+      engineOsc.frequency.setValueAtTime(30, audioCtx.currentTime);
       gainNode.gain.setValueAtTime(0.0, audioCtx.currentTime);
 
-      engineOsc.connect(gainNode);
+      engineOsc.connect(engineFilter);
+      engineFilter.connect(gainNode);
       gainNode.connect(audioCtx.destination);
       engineOsc.start();
     }
 
+    function toggleMute() {
+      isMuted = !isMuted;
+      const btnMain = document.getElementById('main-mute-btn');
+      const btnPause = document.getElementById('pause-mute-btn');
+      
+      const label = `SFX & Music: ${isMuted ? 'OFF' : 'ON'}`;
+      if (btnMain) {
+        btnMain.innerText = label;
+        btnMain.classList.toggle('muted', isMuted);
+      }
+      if (btnPause) {
+        btnPause.innerText = label;
+        btnPause.classList.toggle('muted', isMuted);
+      }
+
+      if (isMuted) {
+        stopBGM();
+        if (gainNode) gainNode.gain.setValueAtTime(0, audioCtx.currentTime);
+      } else if (raceState === 'racing' && !isPaused) {
+        startBGM();
+      }
+    }
+
+    function startBGM() {
+      if (bgmInterval || isMuted) return;
+      const melody = [261.63, 329.63, 392.00, 523.25, 392.00, 329.63, 293.66, 349.23, 440.00, 349.23, 329.63, 261.63];
+      bgmNoteIndex = 0;
+      
+      bgmInterval = setInterval(() => {
+        if (!audioCtx || isMuted || raceState !== 'racing' || isPaused) return;
+        try {
+          const osc = audioCtx.createOscillator();
+          const gain = audioCtx.createGain();
+          osc.type = 'sine';
+          osc.frequency.setValueAtTime(melody[bgmNoteIndex % melody.length], audioCtx.currentTime);
+          
+          gain.gain.setValueAtTime(0.03, audioCtx.currentTime);
+          gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.18);
+          
+          osc.connect(gain);
+          gain.connect(audioCtx.destination);
+          
+          osc.start();
+          osc.stop(audioCtx.currentTime + 0.2);
+          bgmNoteIndex++;
+        } catch(e){}
+      }, 220);
+    }
+
+    function stopBGM() {
+      if (bgmInterval) {
+        clearInterval(bgmInterval);
+        bgmInterval = null;
+      }
+    }
+
     function playSound(freq, duration) {
-      if (!audioCtx) return;
+      if (!audioCtx || isMuted) return;
       try {
         const osc = audioCtx.createOscillator();
         const g = audioCtx.createGain();
+        osc.type = 'sine';
         osc.frequency.setValueAtTime(freq, audioCtx.currentTime);
-        g.gain.setValueAtTime(0.1, audioCtx.currentTime);
+        g.gain.setValueAtTime(0.06, audioCtx.currentTime);
         g.gain.exponentialRampToValueAtTime(0.0001, audioCtx.currentTime + duration);
         osc.connect(g);
         g.connect(audioCtx.destination);
@@ -487,13 +555,14 @@
     }
 
     function updateAudio() {
-      if (!audioCtx || raceState !== 'racing' || isPaused) {
+      if (!audioCtx || raceState !== 'racing' || isPaused || isMuted) {
         if (gainNode) gainNode.gain.setValueAtTime(0, audioCtx.currentTime);
         return;
       }
-      const pitch = 40 + Math.abs(carState.speed) * 220;
+      const pitch = 30 + Math.abs(carState.speed) * 110;
       engineOsc.frequency.setTargetAtTime(pitch, audioCtx.currentTime, 0.1);
-      gainNode.gain.setTargetAtTime(0.08, audioCtx.currentTime, 0.1);
+      engineFilter.frequency.setTargetAtTime(300 + Math.abs(carState.speed) * 400, audioCtx.currentTime, 0.1);
+      gainNode.gain.setTargetAtTime(0.04, audioCtx.currentTime, 0.1);
     }
 
     function buildTrackWithBoundariesAndWalls(mapConfig) {
@@ -629,7 +698,6 @@
       ground.receiveShadow = true;
       environmentGroup.add(ground);
 
-      // Environment props (Mountains or Buildings)
       const isCyber = gameState.currentMap === 'cyber';
       const propGeo = isCyber ? new THREE.BoxGeometry(30, 120, 30) : new THREE.ConeGeometry(60, 100, 5);
       const propMat = new THREE.MeshStandardMaterial({ color: isCyber ? 0x0f172a : mapConfig.horizon, roughness: 0.8 });
@@ -871,6 +939,12 @@
       isPaused = !isPaused;
       raceState = isPaused ? 'paused' : 'racing';
       document.getElementById('pause-menu').style.display = isPaused ? 'block' : 'none';
+
+      if (isPaused) {
+        stopBGM();
+      } else {
+        startBGM();
+      }
     }
 
     function checkTrackBoundary(nextX, nextZ) {
@@ -980,7 +1054,6 @@
       if (playerCarMesh) {
         playerCarMesh.position.set(carState.x, carState.y, carState.z);
         playerCarMesh.rotation.y = carState.angle;
-        // Dynamic camera roll QOL detail
         playerCarMesh.rotation.z = -turnFactor * 0.05 * (carState.speed / currentTopSpeed);
       }
 
@@ -1135,6 +1208,7 @@
           raceState = 'racing';
           raceStartTime = Date.now();
           lapStartTime = Date.now();
+          startBGM();
         } else {
           cdOverlay.style.display = 'none';
           clearInterval(timer);
@@ -1144,6 +1218,7 @@
 
     function finishRace() {
       raceState = 'finished';
+      stopBGM();
 
       const isWinner = racePosition === 1;
       const basePrize = isWinner ? 1000 : 400;
@@ -1279,6 +1354,7 @@
     function showMainMenu() {
       raceState = 'menu';
       isPaused = false;
+      stopBGM();
       document.getElementById('main-menu').style.display = 'block';
       document.getElementById('lobby-menu').style.display = 'none';
       document.getElementById('shop-panel').style.display = 'none';
