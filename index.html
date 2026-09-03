@@ -1,0 +1,453 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Apex Racer 3D - Multiplayer</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; user-select: none; }
+    body, html { width: 100%; height: 100%; overflow: hidden; background-color: #0d0e12; color: #fff; }
+    #canvas-container { width: 100%; height: 100%; position: absolute; top: 0; left: 0; z-index: 1; }
+    
+    /* UI Overlay */
+    .ui-layer { position: absolute; top: 0; left: 0; width: 100%; height: 100%; z-index: 10; pointer-events: none; }
+    .interactive { pointer-events: auto; }
+    
+    /* HUD */
+    #hud { display: none; justify-content: space-between; padding: 25px; }
+    .hud-card { background: rgba(15, 23, 42, 0.75); backdrop-filter: blur(12px); border: 1px solid rgba(255, 255, 255, 0.1); padding: 15px 25px; border-radius: 12px; }
+    .speedo { font-size: 2rem; font-weight: 800; font-style: italic; color: #38bdf8; }
+    .hud-value { font-size: 1.5rem; font-weight: 700; color: #f8fafc; }
+    .hud-label { font-size: 0.75rem; color: #94a3b8; text-transform: uppercase; tracking: 1px; }
+
+    /* Menus */
+    .menu-panel { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); background: rgba(15, 23, 42, 0.85); backdrop-filter: blur(16px); border: 1px solid rgba(255, 255, 255, 0.15); padding: 40px; border-radius: 20px; text-align: center; width: 420px; box-shadow: 0 20px 50px rgba(0,0,0,0.5); }
+    h1 { font-size: 2.5rem; font-weight: 900; font-style: italic; background: linear-gradient(135deg, #38bdf8, #818cf8); -webkit-background-clip: text; -webkit-text-fill-color: transparent; margin-bottom: 20px; }
+    
+    .btn { background: linear-gradient(135deg, #2563eb, #1d4ed8); border: none; color: white; padding: 14px 28px; border-radius: 10px; font-weight: 700; cursor: pointer; transition: all 0.2s; margin: 8px 0; width: 100%; font-size: 1rem; }
+    .btn:hover { transform: translateY(-2px); box-shadow: 0 8px 20px rgba(37, 99, 235, 0.4); }
+    .btn-secondary { background: rgba(255,255,255,0.1); border: 1px solid rgba(255,255,255,0.2); }
+    .btn-secondary:hover { background: rgba(255,255,255,0.2); box-shadow: none; }
+    
+    input { width: 100%; padding: 12px; margin: 8px 0 16px; background: rgba(0,0,0,0.3); border: 1px solid rgba(255,255,255,0.2); border-radius: 8px; color: white; text-align: center; font-size: 1rem; }
+    
+    /* Shop Overlay */
+    #shop-panel { display: none; width: 800px; max-width: 90vw; }
+    .shop-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 15px; margin: 20px 0; }
+    .car-card { background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.1); padding: 15px; border-radius: 10px; cursor: pointer; transition: 0.2s; }
+    .car-card.selected { border-color: #38bdf8; background: rgba(56, 189, 248, 0.15); }
+    .car-card.locked { opacity: 0.6; }
+  </style>
+  <!-- Three.js & PeerJS -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+  <script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js"></script>
+</head>
+<body>
+
+  <div id="canvas-container"></div>
+
+  <div class="ui-layer">
+    <!-- Main Menu -->
+    <div id="main-menu" class="menu-panel interactive">
+      <h1>APEX RACER</h1>
+      <p style="margin-bottom: 20px; color: #94a3b8;">High-Octane P2P WebGL Racing</p>
+      <button class="btn" onclick="showLobby()">Play / Multiplayer</button>
+      <button class="btn btn-secondary" onclick="openShop()">Car Garage & Shop</button>
+      <div style="margin-top: 15px; color: #38bdf8; font-weight: bold;">Cash: $<span id="menu-cash">0</span></div>
+    </div>
+
+    <!-- Lobby Menu -->
+    <div id="lobby-menu" class="menu-panel interactive" style="display:none;">
+      <h2>Multiplayer Lobby</h2>
+      <p style="color: #94a3b8; font-size: 0.85rem; margin: 10px 0;">Share your Peer ID or Join a Friend</p>
+      <input type="text" id="peer-id-display" readonly value="Connecting to Network...">
+      <input type="text" id="join-id-input" placeholder="Enter Host Peer ID">
+      <button class="btn" onclick="connectToHost()">Join Race</button>
+      <button class="btn btn-secondary" onclick="startSingleplayer()">Solo Practice</button>
+      <button class="btn btn-secondary" style="margin-top: 15px;" onclick="showMainMenu()">Back</button>
+    </div>
+
+    <!-- Shop Menu -->
+    <div id="shop-panel" class="menu-panel interactive">
+      <h2>Vehicle Garage</h2>
+      <div style="color: #38bdf8; font-weight: bold; margin-top: 5px;">Cash: $<span id="shop-cash">0</span></div>
+      <div class="shop-grid" id="shop-grid"></div>
+      <button class="btn btn-secondary" onclick="showMainMenu()">Back to Menu</button>
+    </div>
+
+    <!-- Game HUD -->
+    <div id="hud">
+      <div class="hud-card">
+        <div class="hud-label">Speed</div>
+        <div class="speedo"><span id="speed-val">0</span> <span style="font-size: 1rem;">KM/H</span></div>
+      </div>
+      <div class="hud-card" style="text-align: center;">
+        <div class="hud-label">Lap Time</div>
+        <div class="hud-value" id="timer-val">00:00.00</div>
+      </div>
+      <div class="hud-card" style="text-align: right;">
+        <div class="hud-label">Players</div>
+        <div class="hud-value" id="player-count">1</div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    // --- GAME DATA & STATE ---
+    const CARS = [
+      { id: 'rookie', name: 'Rookie GT', price: 0, color: 0xef4444, topSpeed: 0.6, accel: 0.012, handling: 0.035 },
+      { id: 'phantom', name: 'Phantom V8', price: 1000, color: 0x3b82f6, topSpeed: 0.75, accel: 0.016, handling: 0.04 },
+      { id: 'apex', name: 'Apex Hyper', price: 2500, color: 0xeab308, topSpeed: 0.9, accel: 0.02, handling: 0.045 }
+    ];
+
+    let gameState = {
+      cash: 500,
+      ownedCars: ['rookie'],
+      selectedCar: 'rookie'
+    };
+
+    // --- THREE.JS ENGINE SETUP ---
+    let scene, camera, renderer, clock;
+    let playerCarMesh, playerBody;
+    let trackMesh, trackPoints = [];
+    let otherPlayers = {};
+    
+    // Physics / Car State
+    let carState = { x: 0, y: 0.5, z: 0, speed: 0, angle: 0 };
+    const keys = { Forward: false, Backward: false, Left: false, Right: false };
+
+    function initEngine() {
+      const container = document.getElementById('canvas-container');
+      
+      scene = new THREE.Scene();
+      scene.background = new THREE.Color(0x0a0e17);
+      scene.fog = new THREE.FogExp2(0x0a0e17, 0.015);
+
+      camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 1000);
+      
+      renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: "high-performance" });
+      renderer.setSize(window.innerWidth, window.innerHeight);
+      renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+      renderer.shadowMap.enabled = true;
+      renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+      renderer.toneMapping = THREE.ACESFilmicToneMapping;
+      renderer.toneMappingExposure = 1.2;
+      container.appendChild(renderer.domElement);
+
+      clock = new THREE.Clock();
+
+      // Lighting Setup
+      const ambientLight = new THREE.AmbientLight(0xffffff, 0.6);
+      scene.add(ambientLight);
+
+      const dirLight = new THREE.DirectionalLight(0xffffff, 1.5);
+      dirLight.position.set(100, 150, 50);
+      dirLight.castShadow = true;
+      dirLight.shadow.mapSize.width = 2048;
+      dirLight.shadow.mapSize.height = 2048;
+      dirLight.shadow.camera.near = 0.5;
+      dirLight.shadow.camera.far = 300;
+      const d = 100;
+      dirLight.shadow.camera.left = -d; dirLight.shadow.camera.right = d;
+      dirLight.shadow.camera.top = d; dirLight.shadow.camera.bottom = -d;
+      scene.add(dirLight);
+
+      buildTrack();
+      createPlayerCar();
+
+      window.addEventListener('resize', onWindowResize);
+      setupControls();
+      animate();
+    }
+
+    // --- TRACK GENERATION ---
+    function buildTrack() {
+      // Create a smooth looped racing track using CatmullRomCurve3
+      const curve = new THREE.CatmullRomCurve3([
+        new THREE.Vector3(0, 0, 0),
+        new THREE.Vector3(60, 0, 40),
+        new THREE.Vector3(120, 0, 0),
+        new THREE.Vector3(100, 0, -80),
+        new THREE.Vector3(20, 0, -100),
+        new THREE.Vector3(-60, 0, -60),
+        new THREE.Vector3(-40, 0, 20)
+      ], true);
+
+      trackPoints = curve.getPoints(200);
+
+      // Track Road Mesh
+      const trackGeo = new THREE.TubeGeometry(curve, 100, 6, 12, true);
+      const trackMat = new THREE.MeshStandardMaterial({ color: 0x1e293b, roughness: 0.6 });
+      trackMesh = new THREE.Mesh(trackGeo, trackMat);
+      trackMesh.scale.set(1, 0.05, 1); // Flatten tube into a road bed
+      trackMesh.position.y = -0.2;
+      trackMesh.receiveShadow = true;
+      scene.add(trackMesh);
+
+      // Terrain / Ground Floor
+      const groundGeo = new THREE.PlaneGeometry(500, 500);
+      const groundMat = new THREE.MeshStandardMaterial({ color: 0x0f172a, roughness: 0.9 });
+      const ground = new THREE.Mesh(groundGeo, groundMat);
+      ground.rotation.x = -Math.PI / 2;
+      ground.position.y = -0.3;
+      ground.receiveShadow = true;
+      scene.add(ground);
+    }
+
+    // --- CAR PROCEDURAL GENERATION ---
+    function createCarMesh(colorHex) {
+      const carGroup = new THREE.Group();
+
+      // Main Chassis
+      const bodyGeo = new THREE.BoxGeometry(1.6, 0.6, 3.2);
+      const bodyMat = new THREE.MeshStandardMaterial({ color: colorHex, metalness: 0.8, roughness: 0.2 });
+      const body = new THREE.Mesh(bodyGeo, bodyMat);
+      body.position.y = 0.5;
+      body.castShadow = true;
+      carGroup.add(body);
+
+      // Cabin / Glass
+      const cabinGeo = new THREE.BoxGeometry(1.2, 0.5, 1.6);
+      const cabinMat = new THREE.MeshStandardMaterial({ color: 0x0f172a, metalness: 0.9, roughness: 0.1 });
+      const cabin = new THREE.Mesh(cabinGeo, cabinMat);
+      cabin.position.set(0, 0.9, -0.2);
+      carGroup.add(cabin);
+
+      // Wheels
+      const wheelGeo = new THREE.CylinderGeometry(0.35, 0.35, 0.3, 16);
+      const wheelMat = new THREE.MeshStandardMaterial({ color: 0x020617, roughness: 0.5 });
+      wheelGeo.rotateZ(Math.PI / 2);
+
+      const positions = [
+        [-0.85, 0.35, 1.0], [0.85, 0.35, 1.0],
+        [-0.85, 0.35, -1.0], [0.85, 0.35, -1.0]
+      ];
+
+      positions.forEach(pos => {
+        const wheel = new THREE.Mesh(wheelGeo, wheelMat);
+        wheel.position.set(...pos);
+        wheel.castShadow = true;
+        carGroup.add(wheel);
+      });
+
+      return carGroup;
+    }
+
+    function createPlayerCar() {
+      if (playerCarMesh) scene.remove(playerCarMesh);
+      const activeCarConfig = CARS.find(c => c.id === gameState.selectedCar);
+      playerCarMesh = createCarMesh(activeCarConfig.color);
+      scene.add(playerCarMesh);
+    }
+
+    // --- CONTROLS & PHYSICS ENGINE ---
+    function setupControls() {
+      window.addEventListener('keydown', (e) => handleKey(e.code, true));
+      window.addEventListener('keyup', (e) => handleKey(e.code, false));
+    }
+
+    function handleKey(code, state) {
+      if (code === 'KeyW' || code === 'ArrowUp') keys.Forward = state;
+      if (code === 'KeyS' || code === 'ArrowDown') keys.Backward = state;
+      if (code === 'KeyA' || code === 'ArrowLeft') keys.Left = state;
+      if (code === 'KeyD' || code === 'ArrowRight') keys.Right = state;
+    }
+
+    function updatePhysics() {
+      const activeCar = CARS.find(c => c.id === gameState.selectedCar);
+
+      // Acceleration & Braking
+      if (keys.Forward) {
+        carState.speed = Math.min(carState.speed + activeCar.accel, activeCar.topSpeed);
+      } else if (keys.Backward) {
+        carState.speed = Math.max(carState.speed - activeCar.accel, -activeCar.topSpeed * 0.4);
+      } else {
+        carState.speed *= 0.98; // Friction / Drag
+      }
+
+      // Steering
+      if (Math.abs(carState.speed) > 0.01) {
+        const dir = carState.speed > 0 ? 1 : -1;
+        if (keys.Left) carState.angle += activeCar.handling * dir;
+        if (keys.Right) carState.angle -= activeCar.handling * dir;
+      }
+
+      // Position Update
+      carState.x += Math.sin(carState.angle) * carState.speed;
+      carState.z += Math.cos(carState.angle) * carState.speed;
+
+      // Sync 3D Mesh
+      if (playerCarMesh) {
+        playerCarMesh.position.set(carState.x, carState.y, carState.z);
+        playerCarMesh.rotation.y = carState.angle;
+      }
+
+      // Camera Follow System
+      const camOffset = new THREE.Vector3(
+        carState.x - Math.sin(carState.angle) * 8,
+        carState.y + 4,
+        carState.z - Math.cos(carState.angle) * 8
+      );
+      camera.position.lerp(camOffset, 0.1);
+      camera.lookAt(carState.x, carState.y + 1, carState.z);
+
+      // HUD Update
+      document.getElementById('speed-val').innerText = Math.floor(Math.abs(carState.speed) * 220);
+    }
+
+    // --- PEERJS MULTIPLAYER SYSTEM ---
+    let peer, peerConn;
+
+    function initMultiplayer() {
+      peer = new Peer();
+
+      peer.on('open', (id) => {
+        document.getElementById('peer-id-display').value = id;
+      });
+
+      peer.on('connection', (conn) => {
+        peerConn = conn;
+        setupConnectionListeners();
+      });
+    }
+
+    function connectToHost() {
+      const hostId = document.getElementById('join-id-input').value.trim();
+      if (!hostId) return alert('Please enter a valid Peer ID');
+      peerConn = peer.connect(hostId);
+      setupConnectionListeners();
+    }
+
+    function setupConnectionListeners() {
+      peerConn.on('open', () => {
+        document.getElementById('lobby-menu').style.display = 'none';
+        document.getElementById('hud').style.display = 'flex';
+        document.getElementById('player-count').innerText = "2";
+      });
+
+      peerConn.on('data', (data) => {
+        updateRemotePlayer(data);
+      });
+    }
+
+    function broadcastState() {
+      if (peerConn && peerConn.open) {
+        peerConn.send({
+          id: peer.id,
+          x: carState.x,
+          y: carState.y,
+          z: carState.z,
+          angle: carState.angle,
+          carType: gameState.selectedCar
+        });
+      }
+    }
+
+    function updateRemotePlayer(data) {
+      if (!otherPlayers[data.id]) {
+        const carConfig = CARS.find(c => c.id === data.carType) || CARS[0];
+        const remoteMesh = createCarMesh(carConfig.color);
+        scene.add(remoteMesh);
+        otherPlayers[data.id] = remoteMesh;
+      }
+
+      const pMesh = otherPlayers[data.id];
+      pMesh.position.set(data.x, data.y, data.z);
+      pMesh.rotation.y = data.angle;
+    }
+
+    // --- MAIN GAME LOOP ---
+    function animate() {
+      requestAnimationFrame(animate);
+      updatePhysics();
+      broadcastState();
+      renderer.render(scene, camera);
+    }
+
+    function onWindowResize() {
+      camera.aspect = window.innerWidth / window.innerHeight;
+      camera.updateProjectionMatrix();
+      renderer.setSize(window.innerWidth, window.innerHeight);
+    }
+
+    // --- UI & SHOP NAVIGATION ---
+    function updateCurrencyDisplay() {
+      document.getElementById('menu-cash').innerText = gameState.cash;
+      document.getElementById('shop-cash').innerText = gameState.cash;
+    }
+
+    function showMainMenu() {
+      document.getElementById('main-menu').style.display = 'block';
+      document.getElementById('lobby-menu').style.display = 'none';
+      document.getElementById('shop-panel').style.display = 'none';
+      updateCurrencyDisplay();
+    }
+
+    function showLobby() {
+      document.getElementById('main-menu').style.display = 'none';
+      document.getElementById('lobby-menu').style.display = 'block';
+      if (!peer) initMultiplayer();
+    }
+
+    function openShop() {
+      document.getElementById('main-menu').style.display = 'none';
+      document.getElementById('shop-panel').style.display = 'block';
+      renderShop();
+      updateCurrencyDisplay();
+    }
+
+    function renderShop() {
+      const grid = document.getElementById('shop-grid');
+      grid.innerHTML = '';
+
+      CARS.forEach(car => {
+        const isOwned = gameState.ownedCars.includes(car.id);
+        const isSelected = gameState.selectedCar === car.id;
+
+        const card = document.createElement('div');
+        card.className = `car-card ${isSelected ? 'selected' : ''} ${!isOwned ? 'locked' : ''}`;
+        card.innerHTML = `
+          <div style="font-weight:bold;">${car.name}</div>
+          <div style="font-size:0.8rem; color:#94a3b8; margin: 8px 0;">Top Speed: ${car.topSpeed * 100}</div>
+          ${isOwned 
+            ? `<button class="btn btn-secondary" style="font-size:0.8rem; padding:6px;" onclick="selectCar('${car.id}')">${isSelected ? 'Selected' : 'Equip'}</button>`
+            : `<button class="btn" style="font-size:0.8rem; padding:6px;" onclick="buyCar('${car.id}')">Buy $${car.price}</button>`
+          }
+        `;
+        grid.appendChild(card);
+      });
+    }
+
+    function buyCar(carId) {
+      const car = CARS.find(c => c.id === carId);
+      if (gameState.cash >= car.price) {
+        gameState.cash -= car.price;
+        gameState.ownedCars.push(car.id);
+        gameState.selectedCar = car.id;
+        createPlayerCar();
+        renderShop();
+        updateCurrencyDisplay();
+      } else {
+        alert("Not enough Cash!");
+      }
+    }
+
+    function selectCar(carId) {
+      gameState.selectedCar = carId;
+      createPlayerCar();
+      renderShop();
+    }
+
+    function startSingleplayer() {
+      document.getElementById('lobby-menu').style.display = 'none';
+      document.getElementById('hud').style.display = 'flex';
+    }
+
+    // Startup Engine Initialization
+    window.onload = () => {
+      initEngine();
+      updateCurrencyDisplay();
+    };
+  </script>
+</body>
+</html>
