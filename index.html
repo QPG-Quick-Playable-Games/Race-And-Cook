@@ -3,10 +3,10 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-  <title>Apex Racer 3D - Ultimate Edition</title>
+  <title>Apex Racer 3D - Earth Circuit</title>
   <style>
     * { margin: 0; padding: 0; box-sizing: border-box; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; user-select: none; touch-action: none; }
-    body, html { width: 100%; height: 100%; overflow: hidden; background-color: #030712; color: #fff; }
+    body, html { width: 100%; height: 100%; overflow: hidden; background-color: #87ceeb; color: #fff; }
     #canvas-container { width: 100%; height: 100%; position: absolute; top: 0; left: 0; z-index: 1; }
     
     /* UI Layer */
@@ -23,12 +23,12 @@
     /* Touch Controls */
     #touch-controls { display: none; width: 100%; padding: 20px; justify-content: space-between; align-items: flex-end; }
     .touch-cluster { display: flex; gap: 12px; }
-    .touch-btn { width: 65px; height: 65px; border-radius: 50%; background: rgba(255, 255, 255, 0.15); backdrop-filter: blur(8px); border: 2px solid rgba(255, 255, 255, 0.3); color: white; font-size: 1.5rem; font-weight: bold; display: flex; align-items: center; justify-content: center; }
-    .touch-btn-gas { background: rgba(34, 197, 94, 0.3); border-color: rgba(34, 197, 94, 0.6); }
-    .touch-btn-brake { background: rgba(239, 68, 68, 0.3); border-color: rgba(239, 68, 68, 0.6); }
+    .touch-btn { width: 65px; height: 65px; border-radius: 50%; background: rgba(255, 255, 255, 0.2); backdrop-filter: blur(8px); border: 2px solid rgba(255, 255, 255, 0.4); color: white; font-size: 1.5rem; font-weight: bold; display: flex; align-items: center; justify-content: center; }
+    .touch-btn-gas { background: rgba(34, 197, 94, 0.4); border-color: rgba(34, 197, 94, 0.8); }
+    .touch-btn-brake { background: rgba(239, 68, 68, 0.4); border-color: rgba(239, 68, 68, 0.8); }
 
     /* Menus */
-    .menu-panel { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); background: rgba(15, 23, 42, 0.85); backdrop-filter: blur(20px); border: 1px solid rgba(255, 255, 255, 0.15); padding: 30px; border-radius: 24px; text-align: center; width: 90%; max-width: 400px; box-shadow: 0 25px 50px -12px rgba(0,0,0,0.7); }
+    .menu-panel { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); background: rgba(15, 23, 42, 0.88); backdrop-filter: blur(20px); border: 1px solid rgba(255, 255, 255, 0.15); padding: 30px; border-radius: 24px; text-align: center; width: 90%; max-width: 400px; box-shadow: 0 25px 50px -12px rgba(0,0,0,0.5); }
     h1 { font-size: 2.2rem; font-weight: 900; font-style: italic; background: linear-gradient(135deg, #38bdf8, #818cf8); -webkit-background-clip: text; -webkit-text-fill-color: transparent; margin-bottom: 15px; }
     
     .btn { background: linear-gradient(135deg, #0284c7, #2563eb); border: none; color: white; padding: 12px 24px; border-radius: 12px; font-weight: 700; cursor: pointer; margin: 6px 0; width: 100%; font-size: 0.95rem; }
@@ -36,7 +36,6 @@
     
     input { width: 100%; padding: 12px; margin: 8px 0 12px; background: rgba(0,0,0,0.4); border: 1px solid rgba(255,255,255,0.2); border-radius: 8px; color: white; text-align: center; font-size: 1.1rem; text-transform: uppercase; letter-spacing: 2px; }
     
-    /* Room Code Box */
     .room-display { background: rgba(56, 189, 248, 0.15); border: 1px dashed #38bdf8; padding: 10px; border-radius: 10px; font-size: 1.4rem; font-weight: bold; color: #38bdf8; letter-spacing: 3px; margin: 10px 0; }
 
     /* Shop Overlay */
@@ -60,6 +59,7 @@
   <div id="canvas-container"></div>
 
   <div class="ui-layer">
+    <!-- HUD -->
     <div id="hud">
       <div class="hud-card">
         <div class="hud-label">Speed</div>
@@ -71,6 +71,7 @@
       </div>
     </div>
 
+    <!-- Mobile Controls -->
     <div id="touch-controls" class="interactive">
       <div class="touch-cluster">
         <div class="touch-btn" id="btn-left">◀</div>
@@ -82,6 +83,7 @@
       </div>
     </div>
 
+    <!-- Main Menu -->
     <div id="main-menu" class="menu-panel interactive">
       <h1>APEX RACER</h1>
       <button class="btn" onclick="showLobby()">Play Multiplayer</button>
@@ -90,6 +92,7 @@
       <div style="margin-top: 12px; color: #38bdf8; font-weight: bold; font-size: 0.9rem;">Cash: $<span id="menu-cash">0</span></div>
     </div>
 
+    <!-- Lobby Menu -->
     <div id="lobby-menu" class="menu-panel interactive" style="display:none;">
       <h2>Multiplayer</h2>
       
@@ -103,6 +106,7 @@
       <button class="btn btn-secondary" style="margin-top: 10px;" onclick="showMainMenu()">Back</button>
     </div>
 
+    <!-- Shop Menu -->
     <div id="shop-panel" class="menu-panel interactive">
       <h2>Garage</h2>
       <div style="color: #38bdf8; font-weight: bold; margin: 5px 0;">Cash: $<span id="shop-cash">0</span></div>
@@ -126,7 +130,6 @@
     let carState = { x: 0, y: 0.3, z: 0, speed: 0, angle: 0 };
     const keys = { Forward: false, Backward: false, Left: false, Right: false };
     
-    // Track Boundary Params
     const TRACK_WIDTH = 6.2;
     let trackSamplePoints = [];
 
@@ -141,30 +144,46 @@
       renderer.shadowMap.enabled = true;
       renderer.shadowMap.type = THREE.PCFSoftShadowMap;
       renderer.toneMapping = THREE.ACESFilmicToneMapping;
+      renderer.toneMappingExposure = 1.1;
       container.appendChild(renderer.domElement);
 
       scene = new THREE.Scene();
-      scene.background = new THREE.Color(0x030712);
-      scene.fog = new THREE.FogExp2(0x030712, 0.012);
+      
+      // Sky & Fog setup (Daytime atmosphere)
+      scene.background = new THREE.Color(0x87ceeb);
+      scene.fog = new THREE.FogExp2(0xa0d8ef, 0.005);
 
       camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 1000);
 
-      const ambientLight = new THREE.AmbientLight(0xdbeafe, 0.7);
+      // Sun & Sky Lighting
+      const ambientLight = new THREE.AmbientLight(0xffffff, 0.65);
       scene.add(ambientLight);
 
-      const sun = new THREE.DirectionalLight(0xffedd5, 2.0);
-      sun.position.set(100, 120, 50);
+      const sun = new THREE.DirectionalLight(0xfffbeb, 1.8);
+      sun.position.set(120, 150, 80);
       sun.castShadow = true;
+      sun.shadow.mapSize.width = 2048;
+      sun.shadow.mapSize.height = 2048;
+      sun.shadow.camera.near = 0.5;
+      sun.shadow.camera.far = 400;
+      const d = 160;
+      sun.shadow.camera.left = -d; sun.shadow.camera.right = d;
+      sun.shadow.camera.top = d; sun.shadow.camera.bottom = -d;
       scene.add(sun);
 
+      const hemiLight = new THREE.HemisphereLight(0x87ceeb, 0x3d7034, 0.4);
+      scene.add(hemiLight);
+
       const renderScene = new THREE.RenderPass(scene, camera);
-      const bloomPass = new THREE.UnrealBloomPass(new THREE.Vector2(window.innerWidth, window.innerHeight), 0.5, 0.4, 0.85);
+      const bloomPass = new THREE.UnrealBloomPass(new THREE.Vector2(window.innerWidth, window.innerHeight), 0.25, 0.4, 0.9);
 
       composer = new THREE.EffectComposer(renderer);
       composer.addPass(renderScene);
       composer.addPass(bloomPass);
 
       buildTrackWithBoundaries();
+      buildEnvironment();
+      createStartFinishGate();
       createPlayerCar();
 
       window.addEventListener('resize', onWindowResize);
@@ -183,32 +202,129 @@
         new THREE.Vector3(-50, 0, 30)
       ], true);
 
-      // Pre-calculate 400 dense points along track center for quick distance boundaries
       trackSamplePoints = trackCurve.getPoints(400);
 
-      // Track Mesh
+      // Road Surface Mesh
       const trackGeo = new THREE.TubeGeometry(trackCurve, 150, TRACK_WIDTH, 12, true);
-      const trackMat = new THREE.MeshStandardMaterial({ color: 0x111827, roughness: 0.5 });
+      const trackMat = new THREE.MeshStandardMaterial({ color: 0x262626, roughness: 0.7 });
       const trackMesh = new THREE.Mesh(trackGeo, trackMat);
       trackMesh.scale.set(1, 0.02, 1);
-      trackMesh.position.y = -0.1;
+      trackMesh.position.y = -0.08;
+      trackMesh.receiveShadow = true;
       scene.add(trackMesh);
 
-      // Visual Guardrails
-      const guardGeo = new THREE.TubeGeometry(trackCurve, 150, TRACK_WIDTH + 0.5, 8, true);
-      const guardMat = new THREE.MeshStandardMaterial({ color: 0xef4444, roughness: 0.2 });
-      const guardMesh = new THREE.Mesh(guardGeo, guardMat);
-      guardMesh.scale.set(1, 0.08, 1);
-      guardMesh.position.y = 0.1;
-      scene.add(guardMesh);
+      // Red & White Curbs
+      const curbGeo = new THREE.TubeGeometry(trackCurve, 150, TRACK_WIDTH + 0.4, 8, true);
+      const curbMat = new THREE.MeshStandardMaterial({ color: 0xd97706, roughness: 0.4 });
+      const curbMesh = new THREE.Mesh(curbGeo, curbMat);
+      curbMesh.scale.set(1, 0.015, 1);
+      curbMesh.position.y = -0.09;
+      scene.add(curbMesh);
+    }
 
-      // Ground Floor
-      const groundGeo = new THREE.PlaneGeometry(600, 600);
-      const groundMat = new THREE.MeshStandardMaterial({ color: 0x060a12, roughness: 0.95 });
+    // --- EARTH ENVIRONMENT & TREES ---
+    function buildEnvironment() {
+      // Grass Terrain Ground
+      const groundGeo = new THREE.PlaneGeometry(800, 800);
+      const groundMat = new THREE.MeshStandardMaterial({ color: 0x3d7034, roughness: 0.9 });
       const ground = new THREE.Mesh(groundGeo, groundMat);
       ground.rotation.x = -Math.PI / 2;
-      ground.position.y = -0.2;
+      ground.position.y = -0.15;
+      ground.receiveShadow = true;
       scene.add(ground);
+
+      // Low-poly Pine Tree Generator
+      const trunkGeo = new THREE.CylinderGeometry(0.3, 0.5, 2, 6);
+      const trunkMat = new THREE.MeshStandardMaterial({ color: 0x543d2b, roughness: 0.9 });
+      const leavesGeo = new THREE.ConeGeometry(2.2, 5, 6);
+      const leavesMat = new THREE.MeshStandardMaterial({ color: 0x1e4620, roughness: 0.8 });
+
+      const createTree = (x, z) => {
+        const treeGroup = new THREE.Group();
+        const trunk = new THREE.Mesh(trunkGeo, trunkMat);
+        trunk.position.y = 1;
+        trunk.castShadow = true;
+        treeGroup.add(trunk);
+
+        const leaves = new THREE.Mesh(leavesGeo, leavesMat);
+        leaves.position.y = 4;
+        leaves.castShadow = true;
+        treeGroup.add(leaves);
+
+        const scale = 0.8 + Math.random() * 0.5;
+        treeGroup.scale.set(scale, scale, scale);
+        treeGroup.position.set(x, -0.1, z);
+        scene.add(treeGroup);
+      };
+
+      // Scatter Trees around landscape (keeping distance from track)
+      for (let i = 0; i < 180; i++) {
+        const x = (Math.random() - 0.5) * 450;
+        const z = (Math.random() - 0.5) * 450;
+
+        // Ensure tree isn't right on top of the road
+        let tooClose = false;
+        for (let j = 0; j < trackSamplePoints.length; j += 10) {
+          const pt = trackSamplePoints[j];
+          if (Math.hypot(pt.x - x, pt.z - z) < TRACK_WIDTH + 4) {
+            tooClose = true;
+            break;
+          }
+        }
+        if (!tooClose) createTree(x, z);
+      }
+    }
+
+    // --- START / FINISH LINE ARCH ---
+    function createStartFinishGate() {
+      const gateGroup = new THREE.Group();
+
+      // Side Pillars
+      const pillarGeo = new THREE.BoxGeometry(0.8, 5, 0.8);
+      const pillarMat = new THREE.MeshStandardMaterial({ color: 0x1e293b, metalness: 0.5 });
+
+      const leftPillar = new THREE.Mesh(pillarGeo, pillarMat);
+      leftPillar.position.set(-6, 2.5, 0);
+      leftPillar.castShadow = true;
+      gateGroup.add(leftPillar);
+
+      const rightPillar = new THREE.Mesh(pillarGeo, pillarMat);
+      rightPillar.position.set(6, 2.5, 0);
+      rightPillar.castShadow = true;
+      gateGroup.add(rightPillar);
+
+      // Overhead Banner
+      const bannerGeo = new THREE.BoxGeometry(13, 1.2, 0.5);
+      const bannerMat = new THREE.MeshStandardMaterial({ color: 0xef4444, roughness: 0.3 });
+      const banner = new THREE.Mesh(bannerGeo, bannerMat);
+      banner.position.set(0, 4.8, 0);
+      banner.castShadow = true;
+      gateGroup.add(banner);
+
+      // Checkered Line Canvas Texture on Track
+      const canvas = document.createElement('canvas');
+      canvas.width = 128; canvas.height = 32;
+      const ctx = canvas.getContext('2d');
+      ctx.fillStyle = '#ffffff'; ctx.fillRect(0,0,128,32);
+      ctx.fillStyle = '#000000';
+      for (let i = 0; i < 8; i++) {
+        for (let j = 0; j < 2; j++) {
+          if ((i + j) % 2 === 0) ctx.fillRect(i * 16, j * 16, 16, 16);
+        }
+      }
+
+      const lineTexture = new THREE.CanvasTexture(canvas);
+      const lineGeo = new THREE.PlaneGeometry(10, 2);
+      const lineMat = new THREE.MeshStandardMaterial({ map: lineTexture, roughness: 0.8 });
+      const lineMesh = new THREE.Mesh(lineGeo, lineMat);
+      lineMesh.rotation.x = -Math.PI / 2;
+      lineMesh.position.set(0, 0.01, 0);
+      lineMesh.receiveShadow = true;
+      gateGroup.add(lineMesh);
+
+      // Align Gate with initial track direction
+      gateGroup.position.set(0, 0, 0);
+      scene.add(gateGroup);
     }
 
     function createCarMesh(colorHex) {
@@ -262,7 +378,6 @@
     }
 
     function checkTrackBoundary(nextX, nextZ) {
-      // Find distance to closest point on track spline
       let minDistanceSq = Infinity;
       const carPos = new THREE.Vector2(nextX, nextZ);
 
@@ -272,7 +387,6 @@
         if (distSq < minDistanceSq) minDistanceSq = distSq;
       }
 
-      // Return true if car remains within the allowable road corridor width
       return Math.sqrt(minDistanceSq) <= TRACK_WIDTH - 0.8;
     }
 
@@ -292,12 +406,11 @@
       const nextX = carState.x + Math.sin(carState.angle) * carState.speed;
       const nextZ = carState.z + Math.cos(carState.angle) * carState.speed;
 
-      // Wall Boundary Check - Stop/Bounce car if leaving track
       if (checkTrackBoundary(nextX, nextZ)) {
         carState.x = nextX;
         carState.z = nextZ;
       } else {
-        carState.speed = -carState.speed * 0.3; // Bounce back softly
+        carState.speed = -carState.speed * 0.3;
       }
 
       if (playerCarMesh) {
@@ -316,7 +429,7 @@
       document.getElementById('speed-val').innerText = Math.floor(Math.abs(carState.speed) * 210);
     }
 
-    // --- SIMPLE MULTIPLAYER SYSTEM (ROOM CODES) ---
+    // --- MULTIPLAYER ROOMS ---
     let peer, peerConn;
 
     function generateShortCode() {
