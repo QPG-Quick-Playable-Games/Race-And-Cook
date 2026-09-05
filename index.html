@@ -93,7 +93,6 @@
   <div id="canvas-container"></div>
 
   <div class="ui-layer">
-    <!-- HUD -->
     <button id="pause-btn" class="interactive" onclick="togglePause()">II</button>
     
     <div id="hud">
@@ -117,13 +116,10 @@
       </div>
     </div>
 
-    <!-- Minimap UI -->
-    <div id="minimap-card"><canvas id="minimap-canvas"></canvas></div>
+    <div id="minimap-card"><canvas id="minimap-canvas" width="110" height="110"></canvas></div>
 
-    <!-- Countdown Text Overlay -->
     <div id="countdown-overlay">3</div>
 
-    <!-- Touch Joystick & Action Buttons -->
     <div id="touch-controls" class="interactive">
       <div id="joystick-zone">
         <div id="joystick-knob"></div>
@@ -135,7 +131,6 @@
       </div>
     </div>
 
-    <!-- Main Menu -->
     <div id="main-menu" class="menu-panel interactive">
       <h1>RACE AND COOK</h1>
       
@@ -155,7 +150,6 @@
       <div style="margin-top: 12px; color: #38bdf8; font-weight: bold; font-size: 0.9rem;">Cash: $<span id="menu-cash">0</span></div>
     </div>
 
-    <!-- Lobby Menu -->
     <div id="lobby-menu" class="menu-panel interactive" style="display:none;">
       <h2>Multiplayer</h2>
       <p style="font-size:0.8rem; color:#94a3b8;">Selected Track: <span id="lobby-map-name" style="color:#38bdf8; font-weight:bold;">Neon Circuit</span></p>
@@ -169,7 +163,6 @@
       <button class="btn btn-secondary" style="margin-top: 10px;" onclick="showMainMenu()">Back</button>
     </div>
 
-    <!-- Pause Menu -->
     <div id="pause-menu" class="menu-panel interactive" style="display:none;">
       <h2>Game Paused</h2>
       <button class="btn" onclick="togglePause()">Resume</button>
@@ -177,7 +170,6 @@
       <button class="btn btn-secondary" onclick="showMainMenu()">Exit to Menu</button>
     </div>
 
-    <!-- Shop & Upgrade Menu -->
     <div id="shop-panel" class="menu-panel interactive">
       <h2>Garage & Upgrades</h2>
       <div style="color: #38bdf8; font-weight: bold; margin: 5px 0 15px;">Cash: $<span id="shop-cash">0</span></div>
@@ -194,7 +186,6 @@
       <button class="btn btn-secondary" onclick="showMainMenu()">Back</button>
     </div>
 
-    <!-- Race Finish Results Overlay -->
     <div id="results-panel" class="menu-panel interactive" style="display:none;">
       <div id="winner-banner" class="winner-badge winner-gold">VICTORY!</div>
       <p style="font-size: 0.85rem; color: #94a3b8;">Final Placement: <span id="final-place-txt" style="color:#fff; font-weight:bold;">1st Place</span></p>
@@ -237,13 +228,14 @@
         obstacleColor: 0x15803d,
         points: [
           new THREE.Vector3(0, 0, 0),
-          new THREE.Vector3(160, 0, 30),
-          new THREE.Vector3(220, 0, -80),
-          new THREE.Vector3(140, 0, -180),
-          new THREE.Vector3(-60, 0, -180),
-          new THREE.Vector3(-150, 0, -100),
-          new THREE.Vector3(-140, 0, 10),
-          new THREE.Vector3(-60, 0, 50)
+          new THREE.Vector3(120, 0, -30),
+          new THREE.Vector3(180, 0, -120),
+          new THREE.Vector3(100, 0, -220),
+          new THREE.Vector3(-20, 0, -260),
+          new THREE.Vector3(-120, 0, -190),
+          new THREE.Vector3(-180, 0, -80),
+          new THREE.Vector3(-110, 0, 30),
+          new THREE.Vector3(-30, 0, 100)
         ]
       },
       cyber: {
@@ -257,12 +249,15 @@
         obstacleColor: 0xc084fc,
         points: [
           new THREE.Vector3(0, 0, 0),
-          new THREE.Vector3(70, 0, 100),
-          new THREE.Vector3(140, 0, 30),
-          new THREE.Vector3(40, 0, -60),
-          new THREE.Vector3(-40, 0, 60),
-          new THREE.Vector3(-140, 0, -30),
-          new THREE.Vector3(-70, 0, -100)
+          new THREE.Vector3(60, 0, 110),
+          new THREE.Vector3(140, 0, 110),
+          new THREE.Vector3(180, 0, 20),
+          new THREE.Vector3(110, 0, -60),
+          new THREE.Vector3(20, 0, -10),
+          new THREE.Vector3(-50, 0, -110),
+          new THREE.Vector3(-130, 0, -110),
+          new THREE.Vector3(-160, 0, -10),
+          new THREE.Vector3(-100, 0, 60)
         ]
       }
     };
@@ -1137,31 +1132,56 @@
       const ctx = canvas.getContext('2d');
       ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-      const center = 55;
-      const scale = 0.28;
+      let minX = Infinity, maxX = -Infinity, minZ = Infinity, maxZ = -Infinity;
+      trackSamplePoints.forEach(pt => {
+        if (pt.x < minX) minX = pt.x;
+        if (pt.x > maxX) maxX = pt.x;
+        if (pt.z < minZ) minZ = pt.z;
+        if (pt.z > maxZ) maxZ = pt.z;
+      });
+
+      const trackWidthWorld = maxX - minX;
+      const trackHeightWorld = maxZ - minZ;
+      const centerX = (minX + maxX) / 2;
+      const centerZ = (minZ + maxZ) / 2;
+
+      const padding = 16;
+      const availableSize = canvas.width - padding * 2;
+      const scale = Math.min(availableSize / (trackWidthWorld || 1), availableSize / (trackHeightWorld || 1));
+
+      const mapCenterX = canvas.width / 2;
+      const mapCenterY = canvas.height / 2;
+
+      const worldToMap = (wx, wz) => {
+        return {
+          x: mapCenterX + (wx - centerX) * scale,
+          y: mapCenterY + (wz - centerZ) * scale
+        };
+      };
 
       ctx.beginPath();
       ctx.strokeStyle = '#64748b';
       ctx.lineWidth = 4;
       trackSamplePoints.forEach((pt, idx) => {
-        const mx = center + pt.x * scale;
-        const my = center + pt.z * scale;
-        if (idx === 0) ctx.moveTo(mx, my);
-        else ctx.lineTo(mx, my);
+        const mPos = worldToMap(pt.x, pt.z);
+        if (idx === 0) ctx.moveTo(mPos.x, mPos.y);
+        else ctx.lineTo(mPos.x, mPos.y);
       });
       ctx.closePath();
       ctx.stroke();
 
+      const pPos = worldToMap(carState.x, carState.z);
       ctx.fillStyle = '#38bdf8';
       ctx.beginPath();
-      ctx.arc(center + carState.x * scale, center + carState.z * scale, 4, 0, Math.PI * 2);
+      ctx.arc(pPos.x, pPos.y, 4, 0, Math.PI * 2);
       ctx.fill();
 
       ctx.fillStyle = '#ef4444';
       Object.keys(otherPlayers).forEach(id => {
         const m = otherPlayers[id];
+        const rPos = worldToMap(m.position.x, m.position.z);
         ctx.beginPath();
-        ctx.arc(center + m.position.x * scale, center + m.position.z * scale, 4, 0, Math.PI * 2);
+        ctx.arc(rPos.x, rPos.y, 4, 0, Math.PI * 2);
         ctx.fill();
       });
     }
