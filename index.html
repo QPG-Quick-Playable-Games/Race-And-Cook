@@ -156,8 +156,8 @@
       <div style="margin-top: 12px; color: #38bdf8; font-weight: bold; font-size: 0.9rem;">Cash: $<span id="menu-cash">0</span></div>
       
       <div style="margin-top: 10px; font-size: 0.68rem; color: #94a3b8; text-align: center;">
-        Controls: W/S = Gas/Brake | A/D = Steer/Air Spin | Shift = Nitro | Space = Drift<br/>
-        <b>Air Tricks:</b> Use W/S in mid-air to Pitch Flip, A/D to Spin 360!<br/>
+        Controls: W/S = Gas/Brake | A/D = Steer (Ground) / Flips (Air) | Shift = Nitro | Space = Drift<br/>
+        <b>Air Tricks:</b> Press A/D in mid-air to do Backflips and Frontflips!<br/>
         <b>Warning:</b> Land on your wheels or you will CRASH & reset!
       </div>
     </div>
@@ -221,13 +221,13 @@
         obstacleColor: 0x38bdf8,
         points: [
           new THREE.Vector3(0, 0, 0),
-          new THREE.Vector3(100, 0, 40),
-          new THREE.Vector3(150, 10, -50),
-          new THREE.Vector3(80, 16, -140),
-          new THREE.Vector3(0, 8, -90),
-          new THREE.Vector3(-90, 0, -150),
-          new THREE.Vector3(-120, 12, -40),
-          new THREE.Vector3(-40, 0, 40)
+          new THREE.Vector3(100, 2, 40),
+          new THREE.Vector3(150, 8, -50),
+          new THREE.Vector3(80, 15, -140),
+          new THREE.Vector3(0, 10, -90),
+          new THREE.Vector3(-90, 5, -150),
+          new THREE.Vector3(-120, 10, -40),
+          new THREE.Vector3(-40, 2, 40)
         ]
       },
       desert: {
@@ -241,14 +241,14 @@
         obstacleColor: 0x15803d,
         points: [
           new THREE.Vector3(0, 0, 0),
-          new THREE.Vector3(120, 12, -30),
-          new THREE.Vector3(180, 20, -120),
-          new THREE.Vector3(100, 0, -220),
-          new THREE.Vector3(-20, 15, -260),
-          new THREE.Vector3(-120, 5, -190),
-          new THREE.Vector3(-180, 0, -80),
-          new THREE.Vector3(-110, 10, 30),
-          new THREE.Vector3(-30, 0, 100)
+          new THREE.Vector3(120, 6, -30),
+          new THREE.Vector3(180, 15, -120),
+          new THREE.Vector3(100, 10, -220),
+          new THREE.Vector3(-20, 12, -260),
+          new THREE.Vector3(-120, 8, -190),
+          new THREE.Vector3(-180, 4, -80),
+          new THREE.Vector3(-110, 8, 30),
+          new THREE.Vector3(-30, 2, 100)
         ]
       },
       cyber: {
@@ -262,15 +262,15 @@
         obstacleColor: 0xc084fc,
         points: [
           new THREE.Vector3(0, 0, 0),
-          new THREE.Vector3(60, 8, 110),
-          new THREE.Vector3(140, 18, 110),
-          new THREE.Vector3(180, 0, 20),
-          new THREE.Vector3(110, 12, -60),
-          new THREE.Vector3(20, 22, -10),
-          new THREE.Vector3(-50, 10, -110),
-          new THREE.Vector3(-130, 0, -110),
-          new THREE.Vector3(-160, 14, -10),
-          new THREE.Vector3(-100, 0, 60)
+          new THREE.Vector3(60, 4, 110),
+          new THREE.Vector3(140, 12, 110),
+          new THREE.Vector3(180, 8, 20),
+          new THREE.Vector3(110, 14, -60),
+          new THREE.Vector3(20, 18, -10),
+          new THREE.Vector3(-50, 12, -110),
+          new THREE.Vector3(-130, 6, -110),
+          new THREE.Vector3(-160, 12, -10),
+          new THREE.Vector3(-100, 4, 60)
         ]
       }
     };
@@ -1403,9 +1403,10 @@
 
       for (let ramp of rampsData) {
         const dist = Math.hypot(carState.x - ramp.position.x, carState.z - ramp.position.z);
-        if (dist < ramp.length * 0.8 && carState.speed > 0.2) {
+        if (dist < ramp.length * 0.8) {
           isGrounded = false;
-          verticalVelocity = carState.speed * 0.45 + 0.25;
+          const launchSpeed = Math.max(Math.abs(carState.speed), 0.35);
+          verticalVelocity = launchSpeed * 0.5 + 0.35;
           
           airPitch = 0;
           airYaw = 0;
@@ -1537,22 +1538,14 @@
         verticalVelocity -= 0.018; // Gravity
         carState.y += verticalVelocity;
 
-        // Front / Back Flips using Pitch (W / S)
-        const pitchSpeed = 0.09;
-        if (isGasPressed) {
-          airPitch -= pitchSpeed;
-          totalAirFlips -= pitchSpeed;
-        } else if (isBrakePressed) {
+        // Pitch Front/Back Flips using A (Backflip) / D (Frontflip)
+        const pitchSpeed = 0.12;
+        if (keys.Left) {
           airPitch += pitchSpeed;
           totalAirFlips += pitchSpeed;
-        }
-
-        // 360 Air Spins using Yaw (A / D)
-        const yawSpeed = 0.1;
-        if (turnFactor !== 0) {
-          airYaw += turnFactor * yawSpeed;
-          totalAirSpins += turnFactor * yawSpeed;
-          carState.angle += turnFactor * (yawSpeed * 0.5);
+        } else if (keys.Right) {
+          airPitch -= pitchSpeed;
+          totalAirFlips -= pitchSpeed;
         }
 
         // Air trick scoring detection
@@ -1560,11 +1553,6 @@
           const flipName = totalAirFlips > 0 ? "BACKFLIP" : "FRONTFLIP";
           addStylePoints(500, flipName);
           totalAirFlips %= (Math.PI * 2);
-        }
-
-        if (Math.abs(totalAirSpins) >= Math.PI * 2) {
-          addStylePoints(400, "AIR 360 SPIN");
-          totalAirSpins %= (Math.PI * 2);
         }
 
         triggerNitroParticles();
