@@ -300,6 +300,11 @@
     let spinDirection = 1;
     let activeCameraFOV = 60;
 
+    // Screen Shake & Tyre Tracks
+    let screenShake = 0;
+    let tyreTracksGroup = new THREE.Group();
+    let tyreTracks = [];
+
     const keys = { Forward: false, Backward: false, Left: false, Right: false, Nitro: false, Drift: false };
     
     let joystickVector = { x: 0, y: 0 };
@@ -332,6 +337,56 @@
 
     const isTouch = ('ontouchstart' in window) || (navigator.maxTouchPoints > 0);
 
+    function addScreenShake(amount) {
+      screenShake = Math.max(screenShake, amount);
+    }
+
+    function createTyreTrackSegment(p1, p2, width = 0.22) {
+      const dir = new THREE.Vector3().subVectors(p2, p1);
+      const length = dir.length();
+      if (length < 0.05) return;
+
+      const geo = new THREE.PlaneGeometry(width, length);
+      const mat = new THREE.MeshBasicMaterial({
+        color: 0x09090b,
+        transparent: true,
+        opacity: 0.65,
+        depthWrite: false
+      });
+      const mesh = new THREE.Mesh(geo, mat);
+
+      const mid = new THREE.Vector3().addVectors(p1, p2).multiplyScalar(0.5);
+      mesh.position.copy(mid);
+      mesh.position.y = 0.02; // Elevated slightly above ground to prevent z-fighting
+
+      mesh.rotation.x = -Math.PI / 2;
+      mesh.rotation.z = Math.atan2(dir.x, dir.z);
+
+      tyreTracksGroup.add(mesh);
+      tyreTracks.push({ mesh, opacity: 0.65 });
+
+      if (tyreTracks.length > 160) {
+        const oldTrack = tyreTracks.shift();
+        tyreTracksGroup.remove(oldTrack.mesh);
+        oldTrack.mesh.geometry.dispose();
+        oldTrack.mesh.material.dispose();
+      }
+    }
+
+    function updateTyreTracks() {
+      for (let i = tyreTracks.length - 1; i >= 0; i--) {
+        const t = tyreTracks[i];
+        t.opacity -= 0.0015;
+        t.mesh.material.opacity = t.opacity;
+        if (t.opacity <= 0) {
+          tyreTracksGroup.remove(t.mesh);
+          t.mesh.geometry.dispose();
+          t.mesh.material.dispose();
+          tyreTracks.splice(i, 1);
+        }
+      }
+    }
+
     function triggerBanner(text) {
       const banner = document.getElementById('action-banner');
       banner.innerText = text;
@@ -356,6 +411,7 @@
       scene.add(environmentGroup);
       scene.add(obstaclesGroup);
       scene.add(nitroPickupsGroup);
+      scene.add(tyreTracksGroup);
 
       camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 1000);
 
@@ -391,6 +447,8 @@
       while(environmentGroup.children.length > 0) environmentGroup.remove(environmentGroup.children[0]);
       while(obstaclesGroup.children.length > 0) obstaclesGroup.remove(obstaclesGroup.children[0]);
       while(nitroPickupsGroup.children.length > 0) nitroPickupsGroup.remove(nitroPickupsGroup.children[0]);
+      while(tyreTracksGroup.children.length > 0) tyreTracksGroup.remove(tyreTracksGroup.children[0]);
+      tyreTracks = [];
       
       obstaclesData = [];
       nitroPickupsData = [];
@@ -1066,6 +1124,7 @@
         spinDirection = driftDirection !== 0 ? driftDirection : 1;
         play360Sound();
         triggerBanner("360° SPIN!");
+        addScreenShake(0.6); // Strong camera impact on spin initiation
         nitroFuel = Math.min(100, nitroFuel + 20); // Extra bonus for executing 360!
       }
     }
@@ -1104,6 +1163,7 @@
           carState.speed = -carState.speed * 0.6;
           playSound(120, 0.2);
           triggerSmokeParticles();
+          addScreenShake(0.4);
         }
       });
     }
@@ -1116,6 +1176,7 @@
           carState.speed = -carState.speed * 0.5;
           playSound(150, 0.25);
           triggerSmokeParticles();
+          addScreenShake(0.35);
 
           carState.x -= Math.sin(carState.angle) * 0.4;
           carState.z -= Math.cos(carState.angle) * 0.4;
@@ -1150,6 +1211,9 @@
         }
       });
     }
+
+    let prevLeftWheelPos = null;
+    let prevRightWheelPos = null;
 
     function updatePhysics() {
       if (raceState !== 'racing') return;
@@ -1194,7 +1258,7 @@
       else if (keys.Right) turnFactor = -1;
       else if (Math.abs(joystickVector.x) > 0.1) turnFactor = -joystickVector.x;
 
-      // Asphalt 9 Drift Trigger logic
+      // Drift Trigger logic
       const wantsDrift = keys.Drift || (keys.Backward && turnFactor !== 0);
       if (wantsDrift && Math.abs(carState.speed) > 0.35 && turnFactor !== 0) {
         if (!isDrifting) {
@@ -1206,7 +1270,7 @@
         isDrifting = false;
       }
 
-      // Perform Drift Physics & Nitro Recharge
+      // Perform Drift Physics & Tyre Tracks
       if (isDrifting && Math.abs(carState.speed) > 0.2) {
         const targetDriftAngle = driftDirection * 0.65; // ~37 degrees sideways
         carState.driftAngle = THREE.MathUtils.lerp(carState.driftAngle, targetDriftAngle, 0.15);
@@ -1214,11 +1278,14 @@
         // Drifting generates Nitro fuel!
         nitroFuel = Math.min(100, nitroFuel + 0.35);
         
-        // Steering is amplified during drift
-        carState.angle += activeCar.handling * 1.55 * turnFactor;
+        // Drifting is SLOWER than regular turn handling to prevent spinning out into inner walls
+        const driftHandlingSpeed = activeCar.handling * 0.72;
+        carState.angle += driftHandlingSpeed * turnFactor;
         
-        // Retain 92% speed while drifting so it feels punchy and thrilling
+        // Retain momentum while drifting
         carState.speed *= 0.992;
+
+        addScreenShake(0.08); // Subtle drift shake
         
         triggerSmokeParticles();
         triggerSparks();
@@ -1256,6 +1323,7 @@
         isDrifting = false;
         playSound(90, 0.15);
         triggerSmokeParticles();
+        addScreenShake(0.45); // Heavy wall impact shake
       }
 
       checkCarCollisions();
@@ -1277,11 +1345,28 @@
         const driftRoll = isDrifting ? -driftDirection * 0.12 : -turnFactor * 0.06;
         playerCarMesh.rotation.z = driftRoll * (carState.speed / currentTopSpeed);
         playerCarMesh.rotation.x = isNitroActive ? -0.05 : 0;
+
+        // Generate Tyre Tracks from rear wheels
+        if ((isDrifting || isSpinning360) && Math.abs(carState.speed) > 0.15) {
+          const leftWheelOffset = new THREE.Vector3(-0.85, 0, -1.0).applyMatrix4(playerCarMesh.matrixWorld);
+          const rightWheelOffset = new THREE.Vector3(0.85, 0, -1.0).applyMatrix4(playerCarMesh.matrixWorld);
+
+          if (prevLeftWheelPos && prevRightWheelPos) {
+            createTyreTrackSegment(prevLeftWheelPos, leftWheelOffset);
+            createTyreTrackSegment(prevRightWheelPos, rightWheelOffset);
+          }
+          prevLeftWheelPos = leftWheelOffset.clone();
+          prevRightWheelPos = rightWheelOffset.clone();
+        } else {
+          prevLeftWheelPos = null;
+          prevRightWheelPos = null;
+        }
       }
 
+      updateTyreTracks();
       updateRemotePlayersInterpolation();
 
-      // Camera dynamic follow with high-speed dynamic FOV
+      // Camera dynamic follow with high-speed dynamic FOV & Screen Shake
       camera.fov = THREE.MathUtils.lerp(camera.fov, activeCameraFOV, 0.1);
       camera.updateProjectionMatrix();
 
@@ -1290,6 +1375,16 @@
         carState.y + 3.4,
         carState.z - Math.cos(carState.angle) * 7.5
       );
+
+      if (screenShake > 0.01) {
+        camOffset.x += (Math.random() - 0.5) * screenShake * 1.5;
+        camOffset.y += (Math.random() - 0.5) * screenShake * 1.5;
+        camOffset.z += (Math.random() - 0.5) * screenShake * 1.5;
+        screenShake *= 0.88; // Exponential shake falloff
+      } else {
+        screenShake = 0;
+      }
+
       camera.position.lerp(camOffset, 0.14);
       camera.lookAt(carState.x, carState.y + 0.8, carState.z);
 
