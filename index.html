@@ -31,7 +31,7 @@
     /* Countdown & Announcements */
     #countdown-overlay { position: absolute; top: 40%; left: 50%; transform: translate(-50%, -50%); font-size: 5rem; font-weight: 900; font-style: italic; color: #38bdf8; text-shadow: 0 0 20px rgba(56,189,248,0.8); display: none; text-align: center; }
     
-    /* Asphalt Action Banner */
+    /* Action Banner */
     #action-banner { position: absolute; top: 25%; left: 50%; transform: translate(-50%, -50%) scale(0.5); font-size: 3.5rem; font-weight: 900; font-style: italic; color: #f59e0b; text-shadow: 0 0 25px rgba(245, 158, 11, 0.9), 0 0 10px #000; opacity: 0; transition: transform 0.15s ease-out, opacity 0.15s ease-out; pointer-events: none; z-index: 20; text-transform: uppercase; letter-spacing: 2px; text-align: center; }
     #action-banner.show { opacity: 1; transform: translate(-50%, -50%) scale(1.2); }
 
@@ -516,7 +516,6 @@
       rampPositionsU.forEach(u => {
         const pt = trackCurve.getPointAt(u);
         const tangent = trackCurve.getTangentAt(u);
-        const normal = new THREE.Vector3(-tangent.z, 0, tangent.x).normalize();
         const rampAngle = Math.atan2(tangent.x, tangent.z);
 
         const rampWidth = 4.8;
@@ -525,11 +524,11 @@
 
         const rampGroup = new THREE.Group();
 
-        // Wedge ramp shape
+        // Wedge ramp physical object geometry
         const shape = new THREE.Shape();
-        shape.moveTo(0, 0);
-        shape.lineTo(0, rampHeight);
-        shape.lineTo(rampLength, 0);
+        shape.moveTo(-rampLength / 2, 0);
+        shape.lineTo(rampLength / 2, rampHeight);
+        shape.lineTo(rampLength / 2, 0);
         shape.closePath();
 
         const extrudeSettings = { depth: rampWidth, bevelEnabled: false };
@@ -545,13 +544,13 @@
         });
 
         const rampMesh = new THREE.Mesh(geo, mat);
-        rampMesh.rotation.y = rampAngle + Math.PI / 2;
+        rampMesh.rotation.y = rampAngle;
         rampMesh.position.copy(pt);
         rampMesh.position.y += rampHeight / 2;
 
         rampGroup.add(rampMesh);
 
-        // Bright chevron arrow graphics on the ramp incline surface
+        // Neon visuals on top face
         const chevronGeo = new THREE.PlaneGeometry(rampWidth * 0.8, 1.2);
         const chevronMat = new THREE.MeshBasicMaterial({ color: 0xffffff, side: THREE.DoubleSide });
         const chevron = new THREE.Mesh(chevronGeo, chevronMat);
@@ -564,6 +563,7 @@
         rampsGroup.add(rampGroup);
 
         rampsData.push({
+          mesh: rampMesh,
           position: pt.clone(),
           height: rampHeight,
           length: rampLength,
@@ -836,19 +836,20 @@
         checkpointVisuals.push(ring);
       }
 
-      const trackGeo = new THREE.TubeGeometry(trackCurve, 200, TRACK_WIDTH, 12, true);
+      // Smooth track ribbon geometry fully adhering to curve height
+      const trackGeo = new THREE.TubeGeometry(trackCurve, 400, TRACK_WIDTH, 12, true);
       const trackMat = new THREE.MeshStandardMaterial({ color: mapConfig.trackColor, roughness: 0.4, metalness: 0.3 });
       const trackMesh = new THREE.Mesh(trackGeo, trackMat);
       trackMesh.scale.set(1, 0.02, 1);
-      trackMesh.position.y = -0.08;
+      trackMesh.position.y = -0.02;
       trackMesh.receiveShadow = true;
       trackObjectsGroup.add(trackMesh);
 
-      const curbGeo = new THREE.TubeGeometry(trackCurve, 200, TRACK_WIDTH + 0.35, 8, true);
+      const curbGeo = new THREE.TubeGeometry(trackCurve, 400, TRACK_WIDTH + 0.35, 8, true);
       const curbMat = new THREE.MeshStandardMaterial({ color: mapConfig.horizon, roughness: 0.3 });
       const curbMesh = new THREE.Mesh(curbGeo, curbMat);
       curbMesh.scale.set(1, 0.015, 1);
-      curbMesh.position.y = -0.09;
+      curbMesh.position.y = -0.03;
       trackObjectsGroup.add(curbMesh);
 
       const wallHeight = 1.8;
@@ -957,20 +958,23 @@
       }
     }
 
+    // Smooth slope transition interpolation algorithm
     function getTrackHeightAt(x, z) {
-      let minDistanceSq = Infinity;
-      let closestPt = null;
+      let totalWeight = 0;
+      let weightedSum = 0;
 
       for (let i = 0; i < trackSamplePoints.length; i++) {
         const pt = trackSamplePoints[i];
         const distSq = (x - pt.x) ** 2 + (z - pt.z) ** 2;
-        if (distSq < minDistanceSq) {
-          minDistanceSq = distSq;
-          closestPt = pt;
-        }
+        
+        // Continuous smooth weight distribution over surrounding curve segments
+        const weight = 1 / (distSq + 0.1);
+        weightedSum += pt.y * weight;
+        totalWeight += weight;
       }
 
-      return closestPt ? closestPt.y + 0.3 : 0.3;
+      const calculatedHeight = totalWeight > 0 ? (weightedSum / totalWeight) : 0;
+      return calculatedHeight + 0.3;
     }
 
     function resetCarToStartLine() {
@@ -1029,7 +1033,7 @@
     function triggerCrash() {
       if (isCrashing) return;
       isCrashing = true;
-      crashTimer = 1.2; // 1.2s crash animation
+      crashTimer = 1.2;
       playCrashSound();
       triggerBanner("CRASHED!");
       addScreenShake(0.8);
@@ -1382,7 +1386,6 @@
           return;
         }
 
-        // Animate floating bottle
         pickup.mesh.rotation.y += 0.04;
         pickup.mesh.position.y = pickup.position.y + Math.sin(Date.now() * 0.005) * 0.15;
 
@@ -1398,25 +1401,48 @@
       });
     }
 
-    function checkRampLaunch() {
-      if (!isGrounded) return;
-
+    // Physical ramp collision and launching logic
+    function checkRampPhysicalCollisions() {
       for (let ramp of rampsData) {
-        const dist = Math.hypot(carState.x - ramp.position.x, carState.z - ramp.position.z);
-        if (dist < ramp.length * 0.8) {
-          isGrounded = false;
-          const launchSpeed = Math.max(Math.abs(carState.speed), 0.35);
-          verticalVelocity = launchSpeed * 0.5 + 0.35;
-          
-          airPitch = 0;
-          airYaw = 0;
-          airRoll = 0;
-          totalAirFlips = 0;
-          totalAirSpins = 0;
+        const relX = carState.x - ramp.position.x;
+        const relZ = carState.z - ramp.position.z;
 
-          playSound(400, 0.2, 'square');
-          addScreenShake(0.3);
-          break;
+        // Local coordinate transform relative to ramp angle
+        const cosA = Math.cos(-ramp.angle);
+        const sinA = Math.sin(-ramp.angle);
+        const localX = relX * cosA - relZ * sinA;
+        const localZ = relX * sinA + relZ * cosA;
+
+        const halfW = ramp.width / 2;
+        const halfL = ramp.length / 2;
+
+        if (Math.abs(localX) < halfW && Math.abs(localZ) < halfL) {
+          // Check collision face direction
+          const normalizedZ = (localZ + halfL) / ramp.length;
+          
+          if (normalizedZ >= 0 && normalizedZ <= 1) {
+            const currentRampSurfaceHeight = ramp.position.y - (ramp.height / 2) + (normalizedZ * ramp.height);
+
+            // Driving up the incline surface
+            if (carState.y <= currentRampSurfaceHeight + 0.4) {
+              if (isGrounded) {
+                carState.y = currentRampSurfaceHeight + 0.3;
+                
+                // Drive off top edge -> launch airborne
+                if (normalizedZ > 0.88 && carState.speed > 0.2) {
+                  isGrounded = false;
+                  verticalVelocity = Math.abs(carState.speed) * 0.55 + 0.3;
+                  playSound(400, 0.2, 'square');
+                  addScreenShake(0.3);
+                }
+              }
+            } else if (localZ < -halfL + 0.2) {
+              // Physical wall collision against back face of ramp
+              carState.speed = -carState.speed * 0.5;
+              playSound(150, 0.2);
+              addScreenShake(0.4);
+            }
+          }
         }
       }
     }
@@ -1427,7 +1453,6 @@
     function updatePhysics() {
       if (raceState !== 'racing') return;
 
-      // Handle crash state animation & reset
       if (isCrashing) {
         crashTimer -= 0.016;
         if (playerCarMesh) {
@@ -1449,7 +1474,6 @@
 
       const nitroBarEl = document.getElementById('nitro-bar');
 
-      // Nitro handling
       if (keys.Nitro && nitroFuel > 0) {
         isNitroActive = true;
         const nitroMult = 1 + (gameState.nitroLevel * 0.25);
@@ -1475,7 +1499,6 @@
       else if (Math.abs(joystickVector.x) > 0.1) turnFactor = -joystickVector.x;
 
       if (isGrounded) {
-        // Ground physics
         if (isGasPressed) {
           carState.speed = Math.min(carState.speed + currentAccel, currentTopSpeed);
         } else if (isBrakePressed) {
@@ -1531,14 +1554,10 @@
           }
         }
 
-        checkRampLaunch();
-
       } else {
-        // Airborne physics & aerial tricks
-        verticalVelocity -= 0.018; // Gravity
+        verticalVelocity -= 0.018;
         carState.y += verticalVelocity;
 
-        // Pitch Front/Back Flips using A (Backflip) / D (Frontflip)
         const pitchSpeed = 0.12;
         if (keys.Left) {
           airPitch += pitchSpeed;
@@ -1548,7 +1567,6 @@
           totalAirFlips -= pitchSpeed;
         }
 
-        // Air trick scoring detection
         if (Math.abs(totalAirFlips) >= Math.PI * 2) {
           const flipName = totalAirFlips > 0 ? "BACKFLIP" : "FRONTFLIP";
           addStylePoints(500, flipName);
@@ -1558,20 +1576,17 @@
         triggerNitroParticles();
       }
 
-      // Horizontal position calculation
       const moveAngle = carState.angle + (isDrifting ? carState.driftAngle * 0.4 : 0);
       const nextX = carState.x + Math.sin(moveAngle) * carState.speed;
       const nextZ = carState.z + Math.cos(moveAngle) * carState.speed;
 
       const groundHeight = getTrackHeightAt(nextX, nextZ);
 
-      // Landing detection
       if (!isGrounded && carState.y <= groundHeight) {
         carState.y = groundHeight;
         isGrounded = true;
         verticalVelocity = 0;
 
-        // Verify landing orientation (wheels down check)
         const normPitch = Math.abs((airPitch % (Math.PI * 2)));
         const normRoll = Math.abs((airRoll % (Math.PI * 2)));
 
@@ -1582,7 +1597,6 @@
           triggerCrash();
           return;
         } else {
-          // Clean landing
           airPitch = 0;
           airYaw = 0;
           airRoll = 0;
@@ -1609,8 +1623,8 @@
       checkCarCollisions();
       checkObstacleCollisions();
       checkNitroPickups();
+      checkRampPhysicalCollisions();
 
-      // Render Car orientation
       if (playerCarMesh) {
         playerCarMesh.position.set(carState.x, carState.y, carState.z);
         
