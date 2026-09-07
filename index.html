@@ -157,7 +157,7 @@
       
       <div style="margin-top: 10px; font-size: 0.68rem; color: #94a3b8; text-align: center;">
         Controls: W/S = Gas/Brake | A/D = Steer | Shift = Nitro | Space = Drift<br/>
-        <b>Pro Tip:</b> Tap Nitro while Drifting for a 360 Spin!
+        <b>Pro Tip:</b> Hold Nitro while Drifting to execute a 360 Spin!
       </div>
     </div>
 
@@ -1040,7 +1040,6 @@
             e.preventDefault(); 
             if (audioCtx && audioCtx.state === 'suspended') audioCtx.resume();
             keys[key] = true; 
-            if (key === 'Nitro') checkNitroPressTrigger();
           });
           el.addEventListener('touchend', (e) => { e.preventDefault(); keys[key] = false; });
         };
@@ -1110,23 +1109,17 @@
       if (code === 'KeyA' || code === 'ArrowLeft') keys.Left = state;
       if (code === 'KeyD' || code === 'ArrowRight') keys.Right = state;
       if (code === 'Space') keys.Drift = state;
-      if (code === 'ShiftLeft' || code === 'ShiftRight') {
-        if (state && !keys.Nitro) checkNitroPressTrigger();
-        keys.Nitro = state;
-      }
+      if (code === 'ShiftLeft' || code === 'ShiftRight') keys.Nitro = state;
     }
 
-    function checkNitroPressTrigger() {
-      // Asphalt 9 Rule: Pressing Nitro while drifting triggers 360 Spin!
-      if (isDrifting && !isSpinning360 && carState.speed > 0.3) {
-        isSpinning360 = true;
-        spinProgress = 0;
-        spinDirection = driftDirection !== 0 ? driftDirection : 1;
-        play360Sound();
-        triggerBanner("360° SPIN!");
-        addScreenShake(0.6); // Strong camera impact on spin initiation
-        nitroFuel = Math.min(100, nitroFuel + 20); // Extra bonus for executing 360!
-      }
+    function trigger360Spin() {
+      isSpinning360 = true;
+      spinProgress = 0;
+      spinDirection = driftDirection !== 0 ? driftDirection : 1;
+      play360Sound();
+      triggerBanner("360° SPIN!");
+      addScreenShake(0.6);
+      nitroFuel = Math.min(100, nitroFuel + 20);
     }
 
     function togglePause() {
@@ -1270,6 +1263,11 @@
         isDrifting = false;
       }
 
+      // Check for continuous Nitro + Drift combination to initiate 360 spin
+      if (isDrifting && isNitroActive && !isSpinning360 && Math.abs(carState.speed) > 0.3) {
+        trigger360Spin();
+      }
+
       // Perform Drift Physics & Tyre Tracks
       if (isDrifting && Math.abs(carState.speed) > 0.2) {
         const targetDriftAngle = driftDirection * 0.65; // ~37 degrees sideways
@@ -1278,7 +1276,7 @@
         // Drifting generates Nitro fuel!
         nitroFuel = Math.min(100, nitroFuel + 0.35);
         
-        // Drifting is SLOWER than regular turn handling to prevent spinning out into inner walls
+        // Drifting handling adjustment
         const driftHandlingSpeed = activeCar.handling * 0.72;
         carState.angle += driftHandlingSpeed * turnFactor;
         
