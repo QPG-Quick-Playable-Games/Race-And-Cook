@@ -21,7 +21,7 @@
 
     /* Nitro Bar */
     .nitro-container { width: 140px; height: 10px; background: rgba(0,0,0,0.5); border-radius: 5px; overflow: hidden; margin-top: 4px; border: 1px solid rgba(255,255,255,0.2); }
-    .nitro-bar { width: 100%; height: 100%; background: linear-gradient(90deg, #3b82f6, #06b6d4); transition: width 0.1s linear; }
+    .nitro-bar { width: 100%; height: 100%; background: linear-gradient(90deg, #3b82f6, #06b6d4); transition: width 0.05s linear; }
     .nitro-bar.active { background: linear-gradient(90deg, #f59e0b, #ef4444); }
 
     /* Minimap UI */
@@ -299,11 +299,11 @@
     // Aerial Physics, Tricks & Crash Mechanics
     let isGrounded = true;
     let verticalVelocity = 0;
-    let airPitch = 0;       // Front/Back flip angle
-    let airYaw = 0;         // 360 Spin angle
-    let airRoll = 0;        // Barrel roll angle
-    let totalAirFlips = 0;  // Cumulative pitch accumulated in current jump
-    let totalAirSpins = 0;  // Cumulative yaw accumulated in current jump
+    let airPitch = 0;
+    let airYaw = 0;
+    let airRoll = 0;
+    let totalAirFlips = 0;
+    let totalAirSpins = 0;
     let stylePoints = 0;
     let isCrashing = false;
     let crashTimer = 0;
@@ -524,7 +524,6 @@
 
         const rampGroup = new THREE.Group();
 
-        // Wedge ramp physical object geometry
         const shape = new THREE.Shape();
         shape.moveTo(-rampLength / 2, 0);
         shape.lineTo(rampLength / 2, rampHeight);
@@ -550,7 +549,6 @@
 
         rampGroup.add(rampMesh);
 
-        // Neon visuals on top face
         const chevronGeo = new THREE.PlaneGeometry(rampWidth * 0.8, 1.2);
         const chevronMat = new THREE.MeshBasicMaterial({ color: 0xffffff, side: THREE.DoubleSide });
         const chevron = new THREE.Mesh(chevronGeo, chevronMat);
@@ -590,7 +588,6 @@
 
         const bottleGroup = new THREE.Group();
         
-        // Nitro Bottle Mesh
         const cylinderGeo = new THREE.CylinderGeometry(0.22, 0.22, 0.9, 12);
         const cylinderMat = new THREE.MeshStandardMaterial({ color: 0x06b6d4, metalness: 0.9, roughness: 0.1, emissive: 0x0284c7, emissiveIntensity: 0.6 });
         const bottle = new THREE.Mesh(cylinderGeo, cylinderMat);
@@ -602,7 +599,6 @@
         cap.position.y = 0.5;
         bottleGroup.add(cap);
 
-        // Neon halo ring
         const ringGeo = new THREE.RingGeometry(0.4, 0.5, 16);
         const ringMat = new THREE.MeshBasicMaterial({ color: 0x38bdf8, side: THREE.DoubleSide, transparent: true, opacity: 0.8 });
         const ring = new THREE.Mesh(ringGeo, ringMat);
@@ -836,7 +832,6 @@
         checkpointVisuals.push(ring);
       }
 
-      // Smooth track ribbon geometry fully adhering to curve height
       const trackGeo = new THREE.TubeGeometry(trackCurve, 400, TRACK_WIDTH, 12, true);
       const trackMat = new THREE.MeshStandardMaterial({ color: mapConfig.trackColor, roughness: 0.4, metalness: 0.3 });
       const trackMesh = new THREE.Mesh(trackGeo, trackMat);
@@ -958,7 +953,6 @@
       }
     }
 
-    // Smooth slope transition interpolation algorithm
     function getTrackHeightAt(x, z) {
       let totalWeight = 0;
       let weightedSum = 0;
@@ -966,8 +960,6 @@
       for (let i = 0; i < trackSamplePoints.length; i++) {
         const pt = trackSamplePoints[i];
         const distSq = (x - pt.x) ** 2 + (z - pt.z) ** 2;
-        
-        // Continuous smooth weight distribution over surrounding curve segments
         const weight = 1 / (distSq + 0.1);
         weightedSum += pt.y * weight;
         totalWeight += weight;
@@ -1401,13 +1393,11 @@
       });
     }
 
-    // Physical ramp collision and launching logic
     function checkRampPhysicalCollisions() {
       for (let ramp of rampsData) {
         const relX = carState.x - ramp.position.x;
         const relZ = carState.z - ramp.position.z;
 
-        // Local coordinate transform relative to ramp angle
         const cosA = Math.cos(-ramp.angle);
         const sinA = Math.sin(-ramp.angle);
         const localX = relX * cosA - relZ * sinA;
@@ -1417,18 +1407,15 @@
         const halfL = ramp.length / 2;
 
         if (Math.abs(localX) < halfW && Math.abs(localZ) < halfL) {
-          // Check collision face direction
           const normalizedZ = (localZ + halfL) / ramp.length;
           
           if (normalizedZ >= 0 && normalizedZ <= 1) {
             const currentRampSurfaceHeight = ramp.position.y - (ramp.height / 2) + (normalizedZ * ramp.height);
 
-            // Driving up the incline surface
             if (carState.y <= currentRampSurfaceHeight + 0.4) {
               if (isGrounded) {
                 carState.y = currentRampSurfaceHeight + 0.3;
                 
-                // Drive off top edge -> launch airborne
                 if (normalizedZ > 0.88 && carState.speed > 0.2) {
                   isGrounded = false;
                   verticalVelocity = Math.abs(carState.speed) * 0.55 + 0.3;
@@ -1437,7 +1424,6 @@
                 }
               }
             } else if (localZ < -halfL + 0.2) {
-              // Physical wall collision against back face of ramp
               carState.speed = -carState.speed * 0.5;
               playSound(150, 0.2);
               addScreenShake(0.4);
