@@ -28,6 +28,30 @@
     #minimap-card { position: absolute; top: 85px; right: 15px; width: 110px; height: 110px; background: rgba(15, 23, 42, 0.85); border: 2px solid rgba(255,255,255,0.2); border-radius: 50%; overflow: hidden; display: none; z-index: 12; }
     #minimap-canvas { width: 100%; height: 100%; }
 
+    /* Out of Bounds Warning Banner */
+    #oob-banner {
+      position: absolute;
+      top: 15%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      font-size: 2.2rem;
+      font-weight: 900;
+      font-style: italic;
+      color: #ef4444;
+      text-shadow: 0 0 20px rgba(239, 68, 68, 0.8), 0 0 10px #000;
+      display: none;
+      z-index: 25;
+      text-transform: uppercase;
+      letter-spacing: 2px;
+      text-align: center;
+      animation: pulse 0.5s infinite alternate;
+    }
+
+    @keyframes pulse {
+      from { transform: translate(-50%, -50%) scale(1); }
+      to { transform: translate(-50%, -50%) scale(1.1); }
+    }
+
     /* Countdown & Announcements */
     #countdown-overlay { position: absolute; top: 40%; left: 50%; transform: translate(-50%, -50%); font-size: 5rem; font-weight: 900; font-style: italic; color: #38bdf8; text-shadow: 0 0 20px rgba(56,189,248,0.8); display: none; text-align: center; }
     
@@ -120,6 +144,7 @@
     </div>
 
     <div id="action-banner">360° SPIN!</div>
+    <div id="oob-banner">WARNING: OFF TRACK!</div>
     <div id="minimap-card"><canvas id="minimap-canvas" width="110" height="110"></canvas></div>
 
     <div id="countdown-overlay">3</div>
@@ -308,6 +333,7 @@
     let isCrashing = false;
     let crashTimer = 0;
     let lastCheckpointIndex = 0;
+    let outOfBoundsTimer = 0;
 
     // Drifting & Ground 360 Spin Mechanics
     let isDrifting = false;
@@ -515,19 +541,19 @@
       
       rampPositionsU.forEach(u => {
         const pt = trackCurve.getPointAt(u);
-        const tangent = trackCurve.getTangentAt(u);
+        const tangent = trackCurve.getTangentAt(u).normalize();
         const rampAngle = Math.atan2(tangent.x, tangent.z);
 
-        const rampWidth = 4.8;
-        const rampLength = 6.0;
-        const rampHeight = 2.2;
+        const rampWidth = 5.2;
+        const rampLength = 6.5;
+        const rampHeight = 2.4;
 
         const rampGroup = new THREE.Group();
 
         const shape = new THREE.Shape();
-        shape.moveTo(-rampLength / 2, 0);
-        shape.lineTo(rampLength / 2, rampHeight);
-        shape.lineTo(rampLength / 2, 0);
+        shape.moveTo(0, -rampLength / 2);
+        shape.lineTo(0, rampLength / 2);
+        shape.lineTo(rampHeight, rampLength / 2);
         shape.closePath();
 
         const extrudeSettings = { depth: rampWidth, bevelEnabled: false };
@@ -543,9 +569,9 @@
         });
 
         const rampMesh = new THREE.Mesh(geo, mat);
-        rampMesh.rotation.y = rampAngle;
         rampMesh.position.copy(pt);
         rampMesh.position.y += rampHeight / 2;
+        rampMesh.rotation.y = rampAngle;
 
         rampGroup.add(rampMesh);
 
@@ -567,6 +593,7 @@
           length: rampLength,
           width: rampWidth,
           angle: rampAngle,
+          tangent: tangent.clone(),
           u: u
         });
       });
@@ -846,57 +873,6 @@
       curbMesh.scale.set(1, 0.015, 1);
       curbMesh.position.y = -0.03;
       trackObjectsGroup.add(curbMesh);
-
-      const wallHeight = 1.8;
-      const wallOffset = TRACK_WIDTH + 0.1;
-
-      const barrierBaseMat = new THREE.MeshStandardMaterial({ color: 0x0f172a, roughness: 0.3, metalness: 0.8 });
-      const glassMat = new THREE.MeshPhysicalMaterial({
-        color: mapConfig.barrierColor,
-        transparent: true,
-        opacity: 0.35,
-        roughness: 0.1,
-        transmission: 0.6
-      });
-      const neonTrimMat = new THREE.MeshBasicMaterial({ color: mapConfig.barrierColor });
-
-      for (let side of [-1, 1]) {
-        for (let i = 0; i < numSamples; i += 2) {
-          const u1 = i / numSamples;
-          const u2 = ((i + 2) % numSamples) / numSamples;
-
-          const pt1 = trackCurve.getPointAt(u1);
-          const pt2 = trackCurve.getPointAt(u2);
-
-          const tan1 = trackCurve.getTangentAt(u1);
-          const tan2 = trackCurve.getTangentAt(u2);
-
-          const norm1 = new THREE.Vector3(-tan1.z, 0, tan1.x).normalize();
-          const norm2 = new THREE.Vector3(-tan2.z, 0, tan2.x).normalize();
-
-          const wPt1 = pt1.clone().add(norm1.clone().multiplyScalar(side * wallOffset));
-          const wPt2 = pt2.clone().add(norm2.clone().multiplyScalar(side * wallOffset));
-
-          const dist = wPt1.distanceTo(wPt2);
-          const midPoint = wPt1.clone().add(wPt2).multiplyScalar(0.5);
-          const angle = Math.atan2(wPt2.x - wPt1.x, wPt2.z - wPt1.z);
-
-          const baseMesh = new THREE.Mesh(new THREE.BoxGeometry(0.3, 0.5, dist + 0.05), barrierBaseMat);
-          baseMesh.position.set(midPoint.x, midPoint.y + 0.25, midPoint.z);
-          baseMesh.rotation.y = angle;
-          trackObjectsGroup.add(baseMesh);
-
-          const glassMesh = new THREE.Mesh(new THREE.BoxGeometry(0.12, wallHeight - 0.5, dist + 0.05), glassMat);
-          glassMesh.position.set(midPoint.x, midPoint.y + 0.5 + (wallHeight - 0.5) / 2, midPoint.z);
-          glassMesh.rotation.y = angle;
-          trackObjectsGroup.add(glassMesh);
-
-          const neonMesh = new THREE.Mesh(new THREE.BoxGeometry(0.16, 0.08, dist + 0.05), neonTrimMat);
-          neonMesh.position.set(midPoint.x, midPoint.y + wallHeight + 0.04, midPoint.z);
-          neonMesh.rotation.y = angle;
-          trackObjectsGroup.add(neonMesh);
-        }
-      }
     }
 
     function buildUpgradedBackground(mapConfig) {
@@ -954,19 +930,38 @@
     }
 
     function getTrackHeightAt(x, z) {
-      let totalWeight = 0;
-      let weightedSum = 0;
+      if (!trackSamplePoints || trackSamplePoints.length === 0) return 0.3;
+
+      let closestPt1 = trackSamplePoints[0];
+      let closestPt2 = trackSamplePoints[1];
+      let minDistSq1 = Infinity;
+      let minDistSq2 = Infinity;
 
       for (let i = 0; i < trackSamplePoints.length; i++) {
         const pt = trackSamplePoints[i];
         const distSq = (x - pt.x) ** 2 + (z - pt.z) ** 2;
-        const weight = 1 / (distSq + 0.1);
-        weightedSum += pt.y * weight;
-        totalWeight += weight;
+        if (distSq < minDistSq1) {
+          minDistSq2 = minDistSq1;
+          closestPt2 = closestPt1;
+          minDistSq1 = distSq;
+          closestPt1 = pt;
+        } else if (distSq < minDistSq2) {
+          minDistSq2 = distSq;
+          closestPt2 = pt;
+        }
       }
 
-      const calculatedHeight = totalWeight > 0 ? (weightedSum / totalWeight) : 0;
-      return calculatedHeight + 0.3;
+      const d1 = Math.sqrt(minDistSq1);
+      const d2 = Math.sqrt(minDistSq2);
+      const totalDist = d1 + d2;
+      
+      if (totalDist < 0.001) return closestPt1.y + 0.3;
+      
+      const w1 = d2 / totalDist;
+      const w2 = d1 / totalDist;
+      const interpolatedY = (closestPt1.y * w1) + (closestPt2.y * w2);
+
+      return interpolatedY + 0.3;
     }
 
     function resetCarToStartLine() {
@@ -993,6 +988,8 @@
       isCrashing = false;
       crashTimer = 0;
       lastCheckpointIndex = 0;
+      outOfBoundsTimer = 0;
+      document.getElementById('oob-banner').style.display = 'none';
     }
 
     function resetCarToLastCheckpoint() {
@@ -1016,6 +1013,8 @@
       totalAirFlips = 0;
       totalAirSpins = 0;
       isCrashing = false;
+      outOfBoundsTimer = 0;
+      document.getElementById('oob-banner').style.display = 'none';
 
       if (playerCarMesh) {
         playerCarMesh.rotation.set(0, carState.angle, 0);
@@ -1408,7 +1407,7 @@
 
         if (Math.abs(localX) < halfW && Math.abs(localZ) < halfL) {
           const normalizedZ = (localZ + halfL) / ramp.length;
-          
+
           if (normalizedZ >= 0 && normalizedZ <= 1) {
             const currentRampSurfaceHeight = ramp.position.y - (ramp.height / 2) + (normalizedZ * ramp.height);
 
@@ -1416,17 +1415,13 @@
               if (isGrounded) {
                 carState.y = currentRampSurfaceHeight + 0.3;
                 
-                if (normalizedZ > 0.88 && carState.speed > 0.2) {
+                if (normalizedZ > 0.85 && carState.speed > 0.15) {
                   isGrounded = false;
                   verticalVelocity = Math.abs(carState.speed) * 0.55 + 0.3;
                   playSound(400, 0.2, 'square');
                   addScreenShake(0.3);
                 }
               }
-            } else if (localZ < -halfL + 0.2) {
-              carState.speed = -carState.speed * 0.5;
-              playSound(150, 0.2);
-              addScreenShake(0.4);
             }
           }
         }
@@ -1595,15 +1590,37 @@
         carState.y = groundHeight;
       }
 
-      if (checkTrackBoundary(nextX, nextZ)) {
-        carState.x = nextX;
-        carState.z = nextZ;
+      carState.x = nextX;
+      carState.z = nextZ;
+
+      const targetCheckpoint = checkpointPositions[nextCheckpointIndex];
+      const prevCheckpoint = checkpointPositions[(nextCheckpointIndex - 1 + checkpointPositions.length) % checkpointPositions.length];
+      
+      const trackDir = new THREE.Vector3().subVectors(targetCheckpoint, prevCheckpoint).normalize();
+      const carForward = new THREE.Vector3(Math.sin(carState.angle), 0, Math.cos(carState.angle));
+      const dotTrack = carForward.dot(trackDir);
+
+      const isOffTrack = !checkTrackBoundary(carState.x, carState.z);
+      const isWrongWay = dotTrack < -0.3 && carState.speed > 0.1;
+      const oobBanner = document.getElementById('oob-banner');
+
+      if (isOffTrack || isWrongWay) {
+        outOfBoundsTimer += 0.016;
+        oobBanner.style.display = 'block';
+        if (isWrongWay) {
+          oobBanner.innerText = 'WARNING: WRONG WAY!';
+        } else {
+          oobBanner.innerText = 'WARNING: OFF TRACK!';
+        }
+
+        if (outOfBoundsTimer > 3.0) {
+          triggerCrash();
+        }
       } else {
-        carState.speed = -carState.speed * 0.3;
-        isDrifting = false;
-        playSound(90, 0.15);
-        triggerSmokeParticles();
-        addScreenShake(0.45);
+        outOfBoundsTimer = Math.max(0, outOfBoundsTimer - 0.032);
+        if (outOfBoundsTimer === 0) {
+          oobBanner.style.display = 'none';
+        }
       }
 
       checkCarCollisions();
@@ -1674,7 +1691,6 @@
         ring.material.color.setHex(idx === nextCheckpointIndex ? 0xeab308 : MAPS[gameState.currentMap].barrierColor);
       });
 
-      const targetCheckpoint = checkpointPositions[nextCheckpointIndex];
       const distToCheckpoint = Math.hypot(carState.x - targetCheckpoint.x, carState.z - targetCheckpoint.z);
 
       if (distToCheckpoint < TRACK_WIDTH + 2) {
