@@ -526,11 +526,11 @@
 
         const rampGroup = new THREE.Group();
 
-        // Reverse profile direction so the low end faces incoming traffic and the incline goes up towards the direction of movement
+        // Define profile: incline starts low at -rampLength/2 (entry) and rises to rampHeight at +rampLength/2 (exit)
         const shape = new THREE.Shape();
-        shape.moveTo(rampLength / 2, 0);
-        shape.lineTo(-rampLength / 2, rampHeight);
-        shape.lineTo(-rampLength / 2, 0);
+        shape.moveTo(-rampLength / 2, 0);
+        shape.lineTo(rampLength / 2, rampHeight);
+        shape.lineTo(rampLength / 2, 0);
         shape.closePath();
 
         const extrudeSettings = { depth: rampWidth, bevelEnabled: false };
@@ -558,7 +558,7 @@
         const chevronGeo = new THREE.PlaneGeometry(rampWidth * 0.8, 1.2);
         const chevronMat = new THREE.MeshBasicMaterial({ color: 0xffffff, side: THREE.DoubleSide });
         const chevron = new THREE.Mesh(chevronGeo, chevronMat);
-        chevron.rotation.x = Math.atan2(rampHeight, rampLength);
+        chevron.rotation.x = -Math.atan2(rampHeight, rampLength);
         chevron.position.y = rampHeight * 0.1;
         rampGroup.add(chevron);
 
@@ -841,19 +841,58 @@
         checkpointVisuals.push(ring);
       }
 
-      const trackGeo = new THREE.TubeGeometry(trackCurve, 400, TRACK_WIDTH, 12, true);
-      const trackMat = new THREE.MeshStandardMaterial({ color: mapConfig.trackColor, roughness: 0.4, metalness: 0.3 });
+      // Build 3D ribbon geometry matching full elevation (X, Y, Z)
+      const trackVertices = [];
+      const trackIndices = [];
+      const curbVertices = [];
+      const curbIndices = [];
+      const upVector = new THREE.Vector3(0, 1, 0);
+
+      for (let i = 0; i <= numSamples; i++) {
+        const u = (i % numSamples) / numSamples;
+        const pt = trackCurve.getPointAt(u);
+        const tan = trackCurve.getTangentAt(u).normalize();
+        const binormal = new THREE.Vector3().crossVectors(upVector, tan).normalize();
+
+        const pLeft = pt.clone().add(binormal.clone().multiplyScalar(TRACK_WIDTH));
+        const pRight = pt.clone().add(binormal.clone().multiplyScalar(-TRACK_WIDTH));
+
+        trackVertices.push(pLeft.x, pLeft.y, pLeft.z);
+        trackVertices.push(pRight.x, pRight.y, pRight.z);
+
+        const cLeft = pt.clone().add(binormal.clone().multiplyScalar(TRACK_WIDTH + 0.35));
+        const cRight = pt.clone().add(binormal.clone().multiplyScalar(-(TRACK_WIDTH + 0.35)));
+
+        curbVertices.push(cLeft.x, cLeft.y - 0.01, cLeft.z);
+        curbVertices.push(cRight.x, cRight.y - 0.01, cRight.z);
+
+        if (i < numSamples) {
+          const idx = i * 2;
+          trackIndices.push(idx, idx + 1, idx + 2);
+          trackIndices.push(idx + 1, idx + 3, idx + 2);
+
+          curbIndices.push(idx, idx + 1, idx + 2);
+          curbIndices.push(idx + 1, idx + 3, idx + 2);
+        }
+      }
+
+      const trackGeo = new THREE.BufferGeometry();
+      trackGeo.setAttribute('position', new THREE.Float32BufferAttribute(trackVertices, 3));
+      trackGeo.setIndex(trackIndices);
+      trackGeo.computeVertexNormals();
+
+      const trackMat = new THREE.MeshStandardMaterial({ color: mapConfig.trackColor, roughness: 0.4, metalness: 0.3, side: THREE.DoubleSide });
       const trackMesh = new THREE.Mesh(trackGeo, trackMat);
-      trackMesh.scale.set(1, 0.02, 1);
-      trackMesh.position.y = -0.02;
       trackMesh.receiveShadow = true;
       trackObjectsGroup.add(trackMesh);
 
-      const curbGeo = new THREE.TubeGeometry(trackCurve, 400, TRACK_WIDTH + 0.35, 8, true);
-      const curbMat = new THREE.MeshStandardMaterial({ color: mapConfig.horizon, roughness: 0.3 });
+      const curbGeo = new THREE.BufferGeometry();
+      curbGeo.setAttribute('position', new THREE.Float32BufferAttribute(curbVertices, 3));
+      curbGeo.setIndex(curbIndices);
+      curbGeo.computeVertexNormals();
+
+      const curbMat = new THREE.MeshStandardMaterial({ color: mapConfig.horizon, roughness: 0.3, side: THREE.DoubleSide });
       const curbMesh = new THREE.Mesh(curbGeo, curbMat);
-      curbMesh.scale.set(1, 0.015, 1);
-      curbMesh.position.y = -0.03;
       trackObjectsGroup.add(curbMesh);
 
       const wallHeight = 1.8;
@@ -1416,8 +1455,7 @@
         const halfL = ramp.length / 2;
 
         if (Math.abs(localX) < halfW && Math.abs(localZ) < halfL) {
-          // Invert ramp surface mapping to match reversed ramp shape orientation
-          const normalizedZ = (halfL - localZ) / ramp.length;
+          const normalizedZ = (localZ + halfL) / ramp.length;
           
           if (normalizedZ >= 0 && normalizedZ <= 1) {
             const currentRampSurfaceHeight = ramp.position.y - (ramp.height / 2) + (normalizedZ * ramp.height);
@@ -1433,7 +1471,7 @@
                   addScreenShake(0.3);
                 }
               }
-            } else if (localZ > halfL - 0.2) {
+            } else if (localZ < -halfL + 0.2) {
               carState.speed = -carState.speed * 0.5;
               playSound(150, 0.2);
               addScreenShake(0.4);
