@@ -523,14 +523,17 @@
 
         const rampGroup = new THREE.Group();
 
+        // Fixed shape alignment along Z length
         const shape = new THREE.Shape();
         shape.moveTo(-rampLength / 2, 0);
-        shape.lineTo(rampLength / 2, rampHeight);
         shape.lineTo(rampLength / 2, 0);
+        shape.lineTo(rampLength / 2, rampHeight);
         shape.closePath();
 
         const extrudeSettings = { depth: rampWidth, bevelEnabled: false };
         const geo = new THREE.ExtrudeGeometry(shape, extrudeSettings);
+        
+        // Re-center geometry
         geo.center();
 
         const mat = new THREE.MeshStandardMaterial({
@@ -542,7 +545,8 @@
         });
 
         const rampMesh = new THREE.Mesh(geo, mat);
-        rampMesh.rotation.y = -Math.PI / 2;
+        // Correct 3D rotation so slope ascends in positive Z direction
+        rampMesh.rotation.y = Math.PI / 2;
         rampGroup.add(rampMesh);
 
         const chevronGeo = new THREE.PlaneGeometry(rampWidth * 0.8, 1.2);
@@ -1436,12 +1440,15 @@
 
         const cosA = Math.cos(-ramp.angle);
         const sinA = Math.sin(-ramp.angle);
+        
+        // Correct Local Transformation: localX is width, localZ is length
         const localX = relX * cosA - relZ * sinA;
         const localZ = relX * sinA + relZ * cosA;
 
         const halfW = ramp.width / 2;
         const halfL = ramp.length / 2;
 
+        // Verify car is within ramp surface bounding box
         if (Math.abs(localX) <= halfW && Math.abs(localZ) <= halfL) {
           const progress = (localZ + halfL) / ramp.length;
           
@@ -1452,9 +1459,10 @@
             carState.y = rampSurfaceY;
             isGrounded = true;
 
-            if (progress >= 0.88 && carState.speed > 0.1) {
+            // Trigger Launch when approaching ramp edge at speed
+            if (progress >= 0.75 && carState.speed > 0.05) {
               isGrounded = false;
-              const launchForce = Math.max(0.4, Math.abs(carState.speed) * 0.85);
+              const launchForce = Math.max(0.45, Math.abs(carState.speed) * 0.95);
               verticalVelocity = launchForce;
 
               if (isSpinning360) {
