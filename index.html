@@ -515,17 +515,14 @@
       rampPositionsU.forEach(u => {
         const pt = trackCurve.getPointAt(u);
         const tangent = trackCurve.getTangentAt(u);
-        
-        // Calculate track heading angle
         const rampAngle = Math.atan2(tangent.x, tangent.z);
 
-        const rampWidth = 4.8;
-        const rampLength = 6.0;
-        const rampHeight = 2.2;
+        const rampWidth = 5.2;
+        const rampLength = 7.0;
+        const rampHeight = 2.5;
 
         const rampGroup = new THREE.Group();
 
-        // Fix ramp slope direction: start low at entry (-rampLength/2) and rise smoothly to rampHeight at exit (+rampLength/2)
         const shape = new THREE.Shape();
         shape.moveTo(-rampLength / 2, 0);
         shape.lineTo(rampLength / 2, rampHeight);
@@ -534,8 +531,6 @@
 
         const extrudeSettings = { depth: rampWidth, bevelEnabled: false };
         const geo = new THREE.ExtrudeGeometry(shape, extrudeSettings);
-        
-        // Center geometry so the pivot point is in the middle of the ramp
         geo.center();
 
         const mat = new THREE.MeshStandardMaterial({
@@ -547,13 +542,9 @@
         });
 
         const rampMesh = new THREE.Mesh(geo, mat);
-        
-        // Orient extrude geometry length along local Z facing forward
         rampMesh.rotation.y = -Math.PI / 2;
-
         rampGroup.add(rampMesh);
 
-        // Add visual direction indicator (chevron) pointing up the ramp
         const chevronGeo = new THREE.PlaneGeometry(rampWidth * 0.8, 1.2);
         const chevronMat = new THREE.MeshBasicMaterial({ color: 0xffffff, side: THREE.DoubleSide });
         const chevron = new THREE.Mesh(chevronGeo, chevronMat);
@@ -561,7 +552,6 @@
         chevron.position.y = rampHeight * 0.1;
         rampGroup.add(chevron);
 
-        // Apply track tangent angle to the parent group
         rampGroup.position.copy(pt);
         rampGroup.position.y += rampHeight / 2;
         rampGroup.rotation.y = rampAngle;
@@ -840,7 +830,6 @@
         checkpointVisuals.push(ring);
       }
 
-      // Build 3D ribbon geometry matching full elevation (X, Y, Z)
       const trackVertices = [];
       const trackIndices = [];
       const curbVertices = [];
@@ -1355,7 +1344,7 @@
       play360Sound();
       addStylePoints(300, "360° SPIN");
       addScreenShake(0.6);
-      nitroFuel = Math.min(100, nitroFuel + 20);
+      nitroFuel = Math.min(100, nitroFuel + 25);
     }
 
     function togglePause() {
@@ -1453,26 +1442,27 @@
         const halfW = ramp.width / 2;
         const halfL = ramp.length / 2;
 
-        if (Math.abs(localX) < halfW && Math.abs(localZ) < halfL) {
-          const normalizedZ = (localZ + halfL) / ramp.length;
+        if (Math.abs(localX) <= halfW && Math.abs(localZ) <= halfL) {
+          const progress = (localZ + halfL) / ramp.length;
           
-          if (normalizedZ >= 0 && normalizedZ <= 1) {
-            const currentRampSurfaceHeight = ramp.position.y - (ramp.height / 2) + (normalizedZ * ramp.height);
+          const baseTrackY = ramp.position.y - (ramp.height / 2);
+          const rampSurfaceY = baseTrackY + (progress * ramp.height) + 0.3;
 
-            if (carState.y <= currentRampSurfaceHeight + 0.4) {
-              if (isGrounded) {
-                carState.y = currentRampSurfaceHeight + 0.3;
-                
-                if (normalizedZ > 0.88 && carState.speed > 0.2) {
-                  isGrounded = false;
-                  verticalVelocity = Math.abs(carState.speed) * 0.55 + 0.3;
-                  playSound(400, 0.2, 'square');
-                  addScreenShake(0.3);
-                }
+          if (carState.y <= rampSurfaceY + 0.6) {
+            carState.y = rampSurfaceY;
+            isGrounded = true;
+
+            if (progress >= 0.88 && carState.speed > 0.1) {
+              isGrounded = false;
+              const launchForce = Math.max(0.4, Math.abs(carState.speed) * 0.85);
+              verticalVelocity = launchForce;
+
+              if (isSpinning360) {
+                addStylePoints(400, "RAMP 360 LAUNCH");
+              } else {
+                playSound(400, 0.25, 'square');
               }
-            } else if (localZ < -halfL + 0.2) {
-              carState.speed = -carState.speed * 0.5;
-              playSound(150, 0.2);
+              
               addScreenShake(0.4);
             }
           }
