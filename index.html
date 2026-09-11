@@ -516,6 +516,8 @@
       rampPositionsU.forEach(u => {
         const pt = trackCurve.getPointAt(u);
         const tangent = trackCurve.getTangentAt(u);
+        
+        // Calculate track heading angle
         const rampAngle = Math.atan2(tangent.x, tangent.z);
 
         const rampWidth = 4.8;
@@ -524,6 +526,7 @@
 
         const rampGroup = new THREE.Group();
 
+        // Define profile: incline starts low at -rampLength/2 (entry) and rises to rampHeight at +rampLength/2 (exit)
         const shape = new THREE.Shape();
         shape.moveTo(-rampLength / 2, 0);
         shape.lineTo(rampLength / 2, rampHeight);
@@ -532,6 +535,8 @@
 
         const extrudeSettings = { depth: rampWidth, bevelEnabled: false };
         const geo = new THREE.ExtrudeGeometry(shape, extrudeSettings);
+        
+        // Center geometry so the pivot point is in the middle of the ramp
         geo.center();
 
         const mat = new THREE.MeshStandardMaterial({
@@ -543,20 +548,24 @@
         });
 
         const rampMesh = new THREE.Mesh(geo, mat);
-        rampMesh.rotation.y = rampAngle;
-        rampMesh.position.copy(pt);
-        rampMesh.position.y += rampHeight / 2;
+        
+        // Rotate extrude geometry -90° around Y so length aligns along local Z, facing forward
+        rampMesh.rotation.y = Math.PI / 2;
 
         rampGroup.add(rampMesh);
 
+        // Add visual direction indicator (chevron) pointing up the ramp
         const chevronGeo = new THREE.PlaneGeometry(rampWidth * 0.8, 1.2);
         const chevronMat = new THREE.MeshBasicMaterial({ color: 0xffffff, side: THREE.DoubleSide });
         const chevron = new THREE.Mesh(chevronGeo, chevronMat);
         chevron.rotation.x = -Math.atan2(rampHeight, rampLength);
-        chevron.rotation.y = rampAngle;
-        chevron.position.copy(pt);
-        chevron.position.y += rampHeight * 0.55;
+        chevron.position.y = rampHeight * 0.1;
         rampGroup.add(chevron);
+
+        // Apply track tangent angle to the parent group
+        rampGroup.position.copy(pt);
+        rampGroup.position.y += rampHeight / 2;
+        rampGroup.rotation.y = rampAngle;
 
         rampsGroup.add(rampGroup);
 
