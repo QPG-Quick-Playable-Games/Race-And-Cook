@@ -526,11 +526,11 @@
 
         const rampGroup = new THREE.Group();
 
-        // Define profile: incline starts low at -rampLength/2 (entry) and rises to rampHeight at +rampLength/2 (exit)
+        // Reverse profile direction so the low end faces incoming traffic and the incline goes up towards the direction of movement
         const shape = new THREE.Shape();
-        shape.moveTo(-rampLength / 2, 0);
-        shape.lineTo(rampLength / 2, rampHeight);
-        shape.lineTo(rampLength / 2, 0);
+        shape.moveTo(rampLength / 2, 0);
+        shape.lineTo(-rampLength / 2, rampHeight);
+        shape.lineTo(-rampLength / 2, 0);
         shape.closePath();
 
         const extrudeSettings = { depth: rampWidth, bevelEnabled: false };
@@ -558,7 +558,7 @@
         const chevronGeo = new THREE.PlaneGeometry(rampWidth * 0.8, 1.2);
         const chevronMat = new THREE.MeshBasicMaterial({ color: 0xffffff, side: THREE.DoubleSide });
         const chevron = new THREE.Mesh(chevronGeo, chevronMat);
-        chevron.rotation.x = -Math.atan2(rampHeight, rampLength);
+        chevron.rotation.x = Math.atan2(rampHeight, rampLength);
         chevron.position.y = rampHeight * 0.1;
         rampGroup.add(chevron);
 
@@ -1416,7 +1416,8 @@
         const halfL = ramp.length / 2;
 
         if (Math.abs(localX) < halfW && Math.abs(localZ) < halfL) {
-          const normalizedZ = (localZ + halfL) / ramp.length;
+          // Invert ramp surface mapping to match reversed ramp shape orientation
+          const normalizedZ = (halfL - localZ) / ramp.length;
           
           if (normalizedZ >= 0 && normalizedZ <= 1) {
             const currentRampSurfaceHeight = ramp.position.y - (ramp.height / 2) + (normalizedZ * ramp.height);
@@ -1432,7 +1433,7 @@
                   addScreenShake(0.3);
                 }
               }
-            } else if (localZ < -halfL + 0.2) {
+            } else if (localZ > halfL - 0.2) {
               carState.speed = -carState.speed * 0.5;
               playSound(150, 0.2);
               addScreenShake(0.4);
