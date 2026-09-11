@@ -41,11 +41,10 @@
     #joystick-knob { width: 50px; height: 50px; background: rgba(56, 189, 248, 0.8); border: 2px solid rgba(255, 255, 255, 0.8); border-radius: 50%; position: absolute; box-shadow: 0 0 10px rgba(56,189,248,0.5); pointer-events: none; }
 
     .touch-cluster { display: flex; gap: 10px; align-items: center; }
-    .touch-btn { width: 60px; height: 60px; border-radius: 50%; background: rgba(255, 255, 255, 0.2); backdrop-filter: blur(8px); border: 2px solid rgba(255, 255, 255, 0.4); color: white; font-size: 1.2rem; font-weight: bold; display: flex; align-items: center; justify-content: center; }
-    .touch-btn-gas { background: rgba(34, 197, 94, 0.4); border-color: rgba(34, 197, 94, 0.8); }
-    .touch-btn-brake { background: rgba(239, 68, 68, 0.4); border-color: rgba(239, 68, 68, 0.8); }
+    .touch-btn { width: 60px; height: 60px; border-radius: 50%; background: rgba(255, 255, 255, 0.2); backdrop-filter: blur(8px); border: 2px solid rgba(255, 255, 255, 0.4); color: white; font-size: 0.75rem; font-weight: bold; display: flex; align-items: center; justify-content: center; text-align: center; }
     .touch-btn-drift { background: rgba(168, 85, 247, 0.4); border-color: rgba(168, 85, 247, 0.8); }
     .touch-btn-nitro { background: rgba(245, 158, 11, 0.4); border-color: rgba(245, 158, 11, 0.8); width: 70px; height: 70px; font-size: 0.85rem; }
+    .touch-btn-flip { background: rgba(56, 189, 248, 0.4); border-color: rgba(56, 189, 248, 0.8); width: 65px; height: 65px; display: none; }
 
     /* Menus */
     .menu-panel { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); background: rgba(15, 23, 42, 0.88); backdrop-filter: blur(20px); border: 1px solid rgba(255, 255, 255, 0.15); padding: 30px; border-radius: 24px; text-align: center; width: 90%; max-width: 460px; box-shadow: 0 25px 50px -12px rgba(0,0,0,0.5); }
@@ -129,10 +128,10 @@
         <div id="joystick-knob"></div>
       </div>
       <div class="touch-cluster">
-        <div class="touch-btn touch-btn-brake" id="btn-brake">S</div>
+        <div class="touch-btn touch-btn-flip" id="btn-backflip">BACK<br/>FLIP</div>
+        <div class="touch-btn touch-btn-flip" id="btn-frontflip">FRONT<br/>FLIP</div>
         <div class="touch-btn touch-btn-drift" id="btn-drift">DRIFT</div>
         <div class="touch-btn touch-btn-nitro" id="btn-nitro">NITRO</div>
-        <div class="touch-btn touch-btn-gas" id="btn-gas">W</div>
       </div>
     </div>
 
@@ -156,8 +155,8 @@
       <div style="margin-top: 12px; color: #38bdf8; font-weight: bold; font-size: 0.9rem;">Cash: $<span id="menu-cash">0</span></div>
       
       <div style="margin-top: 10px; font-size: 0.68rem; color: #94a3b8; text-align: center;">
-        Controls: W/S = Gas/Brake | A/D = Steer (Ground) / Flips (Air) | Shift = Nitro | Space = Drift<br/>
-        <b>Air Tricks:</b> Press A/D in mid-air to do Backflips and Frontflips!<br/>
+        Controls: Joystick/WASD = Drive | Space = Drift | Shift = Nitro<br/>
+        <b>Air Tricks:</b> Use Frontflip/Backflip buttons (or W/S keys) in mid-air!<br/>
         <b>Warning:</b> Land on your wheels or you will CRASH & reset!
       </div>
     </div>
@@ -322,7 +321,7 @@
     let tyreTracksGroup = new THREE.Group();
     let tyreTracks = [];
 
-    const keys = { Forward: false, Backward: false, Left: false, Right: false, Nitro: false, Drift: false };
+    const keys = { Forward: false, Backward: false, Left: false, Right: false, Nitro: false, Drift: false, Frontflip: false, Backflip: false };
     
     let joystickVector = { x: 0, y: 0 };
     let audioCtx, engineOsc, engineFilter, gainNode;
@@ -526,7 +525,7 @@
 
         const rampGroup = new THREE.Group();
 
-        // Define profile: incline starts low at -rampLength/2 (entry) and rises to rampHeight at +rampLength/2 (exit)
+        // Fix ramp slope direction: start low at entry (-rampLength/2) and rise smoothly to rampHeight at exit (+rampLength/2)
         const shape = new THREE.Shape();
         shape.moveTo(-rampLength / 2, 0);
         shape.lineTo(rampLength / 2, rampHeight);
@@ -549,8 +548,8 @@
 
         const rampMesh = new THREE.Mesh(geo, mat);
         
-        // Rotate extrude geometry -90° around Y so length aligns along local Z, facing forward
-        rampMesh.rotation.y = Math.PI / 2;
+        // Orient extrude geometry length along local Z facing forward
+        rampMesh.rotation.y = -Math.PI / 2;
 
         rampGroup.add(rampMesh);
 
@@ -1280,10 +1279,10 @@
           });
           el.addEventListener('touchend', (e) => { e.preventDefault(); keys[key] = false; });
         };
-        bindTouch('btn-gas', 'Forward');
-        bindTouch('btn-brake', 'Backward');
         bindTouch('btn-nitro', 'Nitro');
         bindTouch('btn-drift', 'Drift');
+        bindTouch('btn-frontflip', 'Frontflip');
+        bindTouch('btn-backflip', 'Backflip');
 
         setupJoystick();
       }
@@ -1533,6 +1532,11 @@
       else if (Math.abs(joystickVector.x) > 0.1) turnFactor = -joystickVector.x;
 
       if (isGrounded) {
+        if (isTouch) {
+          document.getElementById('btn-frontflip').style.display = 'none';
+          document.getElementById('btn-backflip').style.display = 'none';
+        }
+
         if (isGasPressed) {
           carState.speed = Math.min(carState.speed + currentAccel, currentTopSpeed);
         } else if (isBrakePressed) {
@@ -1589,14 +1593,22 @@
         }
 
       } else {
+        if (isTouch) {
+          document.getElementById('btn-frontflip').style.display = 'flex';
+          document.getElementById('btn-backflip').style.display = 'flex';
+        }
+
         verticalVelocity -= 0.018;
         carState.y += verticalVelocity;
 
         const pitchSpeed = 0.12;
-        if (keys.Left) {
+        const wantsBackflip = keys.Backflip || keys.Backward || joystickVector.y > 0.4;
+        const wantsFrontflip = keys.Frontflip || keys.Forward || joystickVector.y < -0.4;
+
+        if (wantsBackflip) {
           airPitch += pitchSpeed;
           totalAirFlips += pitchSpeed;
-        } else if (keys.Right) {
+        } else if (wantsFrontflip) {
           airPitch -= pitchSpeed;
           totalAirFlips -= pitchSpeed;
         }
